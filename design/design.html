@@ -1,0 +1,1240 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aegis Protocol | Decentralized Digital Inheritance</title>
+
+    <!-- Fonts: Inter for clean, modern SaaS typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Icons: Remix Icon -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css"
+      rel="stylesheet"
+    />
+
+    <style>
+      /*
+       * =========================================
+       * AEGIS PROTOCOL DESIGN SYSTEM
+       * =========================================
+       */
+
+      :root {
+          /* Colors: Light Theme */
+          --white: #ffffff;
+          --off-white: #f8fafc;
+          --slate-50: #f8fafc;
+          --slate-100: #f1f5f9;
+          --slate-200: #e2e8f0;
+          --slate-300: #cbd5e1;
+          --slate-400: #94a3b8;
+          --slate-500: #64748b;
+          --slate-600: #475569;
+          --slate-700: #334155;
+          --slate-800: #1e293b;
+          --slate-900: #0f172a;
+
+          /* Brand Colors */
+          --primary-50: #eff6ff;
+          --primary-100: #dbeafe;
+          --primary-200: #bfdbfe;
+          --primary-300: #93c5fd;
+          --primary-400: #60a5fa;
+          --primary-500: #3b82f6;
+          --primary-600: #2563eb;
+          --primary-700: #1d4ed8;
+
+          --accent-cyan: #06b6d4;
+          --accent-emerald: #10b981;
+          --accent-rose: #f43f5e;
+          --accent-amber: #f59e0b;
+
+          /* Gradients */
+          --gradient-primary: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+          --gradient-surface: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+
+          /* Shadows */
+          --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+          --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+          --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+          --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+          --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+          --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.15);
+
+          /* Radius */
+          --radius-sm: 0.375rem;
+          --radius-md: 0.5rem;
+          --radius-lg: 0.75rem;
+          --radius-xl: 1rem;
+          --radius-2xl: 1.5rem;
+          --radius-full: 9999px;
+
+          /* Spacing */
+          --space-1: 0.25rem;
+          --space-2: 0.5rem;
+          --space-3: 0.75rem;
+          --space-4: 1rem;
+          --space-5: 1.25rem;
+          --space-6: 1.5rem;
+          --space-8: 2rem;
+          --space-10: 2.5rem;
+          --space-12: 3rem;
+          --space-16: 4rem;
+          --space-20: 5rem;
+
+          /* Transitions */
+          --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+          --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+          --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      /* Reset & Base */
+      * { box-sizing: border-box; margin: 0; padding: 0; outline: none; }
+
+      body {
+          font-family: 'Inter', sans-serif;
+          background-color: var(--slate-50);
+          color: var(--slate-800);
+          line-height: 1.5;
+          font-size: 14px; /* Slightly smaller for dense dashboards */
+          -webkit-font-smoothing: antialiased;
+          overflow-x: hidden;
+      }
+
+      /* Typography */
+      h1, h2, h3, h4, h5, h6 {
+          font-weight: 700;
+          color: var(--slate-900);
+          line-height: 1.2;
+          letter-spacing: -0.02em;
+      }
+
+      h1 { font-size: 2.25rem; }
+      h2 { font-size: 1.75rem; }
+      h3 { font-size: 1.375rem; }
+      h4 { font-size: 1.125rem; }
+      p { color: var(--slate-600); }
+
+      .text-small { font-size: 0.875rem; }
+      .text-tiny { font-size: 0.75rem; }
+      .text-primary { color: var(--primary-600); }
+      .text-emerald { color: var(--accent-emerald); }
+      .text-rose { color: var(--accent-rose); }
+      .font-medium { font-weight: 500; }
+      .font-bold { font-weight: 700; }
+
+      /* Utilities */
+      .flex { display: flex; }
+      .flex-col { flex-direction: column; }
+      .items-center { align-items: center; }
+      .justify-between { justify-content: space-between; }
+      .justify-center { justify-content: center; }
+      .gap-2 { gap: var(--space-2); }
+      .gap-4 { gap: var(--space-4); }
+      .gap-6 { gap: var(--space-6); }
+      .w-full { width: 100%; }
+      .h-full { height: 100%; }
+      .grid { display: grid; }
+      .hidden { display: none !important; }
+      .relative { position: relative; }
+      .absolute { position: absolute; }
+      .fixed { position: fixed; }
+
+      /* Buttons */
+      .btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: var(--space-2);
+          padding: 0.625rem 1.25rem;
+          border-radius: var(--radius-lg);
+          font-weight: 600;
+          font-size: 0.875rem;
+          cursor: pointer;
+          transition: all var(--transition-base);
+          border: 1px solid transparent;
+          text-decoration: none;
+          white-space: nowrap;
+      }
+
+      .btn-primary {
+          background: var(--gradient-primary);
+          color: var(--white);
+          box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+      }
+      .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(59, 130, 246, 0.3); }
+      .btn-primary:active { transform: translateY(0); }
+
+      .btn-secondary {
+          background: var(--white);
+          color: var(--slate-700);
+          border: 1px solid var(--slate-200);
+      }
+      .btn-secondary:hover { background: var(--slate-50); border-color: var(--slate-300); }
+
+      .btn-ghost {
+          background: transparent;
+          color: var(--slate-600);
+      }
+      .btn-ghost:hover { background: var(--slate-100); color: var(--slate-900); }
+
+      .btn-danger {
+          background: #fff1f2;
+          color: var(--accent-rose);
+          border: 1px solid #fecdd3;
+      }
+      .btn-danger:hover { background: #ffe4e6; }
+
+      .btn-lg { padding: 0.875rem 1.75rem; font-size: 1rem; }
+
+      /* Cards & Surfaces */
+      .card {
+          background: var(--white);
+          border-radius: var(--radius-xl);
+          border: 1px solid var(--slate-100);
+          box-shadow: var(--shadow-sm);
+          padding: var(--space-6);
+          transition: all var(--transition-base);
+      }
+      .card:hover { box-shadow: var(--shadow-md); }
+
+      .card-header { margin-bottom: var(--space-4); padding-bottom: var(--space-4); border-bottom: 1px solid var(--slate-100); }
+      .card-title { font-size: 1.125rem; font-weight: 600; display: flex; align-items: center; gap: var(--space-2); }
+
+      /* Inputs */
+      .input-group { margin-bottom: var(--space-4); }
+      .label { display: block; font-size: 0.875rem; font-weight: 500; color: var(--slate-700); margin-bottom: var(--space-2); }
+      .input {
+          width: 100%;
+          padding: 0.75rem 1rem;
+          border-radius: var(--radius-lg);
+          border: 1px solid var(--slate-200);
+          background: var(--white);
+          font-size: 0.9rem;
+          color: var(--slate-800);
+          transition: all var(--transition-fast);
+      }
+      .input:focus { border-color: var(--primary-500); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+      .input-readonly { background: var(--slate-50); cursor: not-allowed; color: var(--slate-500); }
+
+      /* Badges */
+      .badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.25rem 0.75rem;
+          border-radius: var(--radius-full);
+          font-size: 0.75rem;
+          font-weight: 600;
+      }
+      .badge-emerald { background: #ecfdf5; color: var(--accent-emerald); }
+      .badge-blue { background: var(--primary-50); color: var(--primary-600); }
+      .badge-slate { background: var(--slate-100); color: var(--slate-600); }
+      .badge-rose { background: #fff1f2; color: var(--accent-rose); }
+
+      /* Layout System */
+      #app { display: flex; flex-direction: column; min-height: 100vh; }
+
+      /* Sidebar */
+      .sidebar {
+          width: 260px;
+          background: var(--white);
+          border-right: 1px solid var(--slate-100);
+          position: fixed;
+          height: 100vh;
+          z-index: 50;
+          display: flex;
+          flex-direction: column;
+          padding: var(--space-4);
+      }
+      .logo-area { display: flex; align-items: center; gap: var(--space-3); padding: 0 var(--space-2) var(--space-8); }
+      .logo-icon { width: 32px; height: 32px; background: var(--gradient-primary); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; color: white; }
+      .nav-links { flex: 1; display: flex; flex-direction: column; gap: var(--space-1); }
+      .nav-item {
+          display: flex;
+          align-items: center;
+          gap: var(--space-3);
+          padding: 0.75rem 1rem;
+          border-radius: var(--radius-lg);
+          color: var(--slate-500);
+          text-decoration: none;
+          font-weight: 500;
+          transition: all var(--transition-fast);
+          cursor: pointer;
+      }
+      .nav-item i { font-size: 1.25rem; }
+      .nav-item:hover { background: var(--slate-50); color: var(--slate-800); }
+      .nav-item.active { background: var(--primary-50); color: var(--primary-600); }
+      .user-profile { margin-top: auto; padding-top: var(--space-4); border-top: 1px solid var(--slate-100); display: flex; align-items: center; gap: var(--space-3); cursor: pointer; }
+      .avatar { width: 36px; height: 36px; border-radius: var(--radius-full); object-fit: cover; }
+
+      /* Main Content Area */
+      .main-content {
+          margin-left: 260px;
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          min-height: 100vh;
+      }
+
+      /* Top Header */
+      .top-header {
+          height: 70px;
+          background: rgba(255, 255, 255, 0.8);
+          backdrop-filter: blur(12px);
+          border-bottom: 1px solid var(--slate-100);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0 var(--space-8);
+          position: sticky;
+          top: 0;
+          z-index: 40;
+      }
+      .network-status { display: flex; align-items: center; gap: var(--space-2); font-size: 0.875rem; color: var(--slate-600); background: var(--slate-50); padding: 0.25rem 0.75rem; border-radius: var(--radius-full); border: 1px solid var(--slate-100); }
+      .network-dot { width: 8px; height: 8px; background: var(--accent-emerald); border-radius: 50%; box-shadow: 0 0 8px var(--accent-emerald); }
+
+      .header-actions { display: flex; gap: var(--space-4); align-items: center; }
+      .icon-btn { width: 40px; height: 40px; border-radius: var(--radius-full); display: flex; align-items: center; justify-content: center; color: var(--slate-500); cursor: pointer; transition: background var(--transition-fast); border: none; background: transparent; font-size: 1.25rem; }
+      .icon-btn:hover { background: var(--slate-100); color: var(--slate-800); }
+      .notification-dot { position: relative; }
+      .notification-dot::after { content: ''; position: absolute; top: 10px; right: 10px; width: 8px; height: 8px; background: var(--accent-rose); border-radius: 50%; border: 2px solid var(--white); }
+
+      .wallet-btn {
+          background: var(--slate-900);
+          color: var(--white);
+          border-radius: var(--radius-lg);
+          padding: 0.5rem 1rem;
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+          font-size: 0.875rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all var(--transition-fast);
+      }
+      .wallet-btn:hover { background: var(--slate-800); transform: translateY(-1px); }
+
+      /* Page Content */
+      .page-container { padding: var(--space-8); max-width: 1400px; margin: 0 auto; width: 100%; }
+      .page-header { margin-bottom: var(--space-8); display: flex; justify-content: space-between; align-items: flex-end; }
+      .breadcrumbs { display: flex; gap: var(--space-2); color: var(--slate-400); font-size: 0.875rem; margin-bottom: var(--space-2); }
+      .breadcrumb-item { cursor: pointer; transition: color var(--transition-fast); }
+      .breadcrumb-item:hover { color: var(--primary-600); }
+      .breadcrumb-active { color: var(--slate-600); font-weight: 500; }
+
+      /* Wizard Layout */
+      .wizard-layout { display: flex; gap: var(--space-8); align-items: flex-start; }
+      .wizard-steps { width: 250px; flex-shrink: 0; }
+      .step-indicator { display: flex; align-items: gap: var(--space-3); margin-bottom: var(--space-6); cursor: pointer; opacity: 0.5; transition: opacity var(--transition-fast); }
+      .step-indicator.active { opacity: 1; }
+      .step-indicator.completed { opacity: 1; color: var(--accent-emerald); }
+      .step-number { width: 28px; height: 28px; border-radius: var(--radius-full); background: var(--slate-100); color: var(--slate-500); display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 600; }
+      .step-indicator.active .step-number { background: var(--primary-600); color: white; }
+      .step-indicator.completed .step-number { background: var(--accent-emerald); color: white; }
+      .wizard-content { flex: 1; }
+
+      /* Dashboard Grid */
+      .dashboard-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--space-6); }
+      .col-span-12 { grid-column: span 12; }
+      .col-span-8 { grid-column: span 8; }
+      .col-span-4 { grid-column: span 4; }
+      .col-span-6 { grid-column: span 6; }
+      .col-span-3 { grid-column: span 3; }
+
+      /* Stat Card */
+      .stat-card { display: flex; align-items: center; justify-content: space-between; }
+      .stat-value { font-size: 1.75rem; font-weight: 700; color: var(--slate-900); margin: var(--space-2) 0; }
+      .stat-label { font-size: 0.875rem; color: var(--slate-500); }
+      .stat-icon { width: 48px; height: 48px; border-radius: var(--radius-xl); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
+      .bg-blue-soft { background: var(--primary-50); color: var(--primary-600); }
+      .bg-emerald-soft { background: #ecfdf5; color: var(--accent-emerald); }
+      .bg-rose-soft { background: #fff1f2; color: var(--accent-rose); }
+      .bg-purple-soft { background: #f3e8ff; color: #9333ea; }
+
+      /* Vault List */
+      .vault-item { display: flex; align-items: center; justify-content: space-between; padding: var(--space-4); border: 1px solid var(--slate-100); border-radius: var(--radius-xl); margin-bottom: var(--space-4); background: var(--white); transition: all var(--transition-base); }
+      .vault-item:hover { border-color: var(--primary-300); box-shadow: var(--shadow-md); transform: translateY(-2px); }
+      .vault-info { display: flex; align-items: center; gap: var(--space-4); }
+      .vault-icon { width: 56px; height: 56px; background: var(--slate-50); border-radius: var(--radius-xl); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; color: var(--slate-400); border: 1px solid var(--slate-100); }
+
+      /* Table */
+      .table-container { overflow-x: auto; border-radius: var(--radius-xl); border: 1px solid var(--slate-100); }
+      table { width: 100%; border-collapse: collapse; background: var(--white); }
+      th { text-align: left; padding: 1rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--slate-500); background: var(--slate-50); font-weight: 600; border-bottom: 1px solid var(--slate-100); }
+      td { padding: 1rem; font-size: 0.875rem; color: var(--slate-700); border-bottom: 1px solid var(--slate-100); }
+      tr:last-child td { border-bottom: none; }
+      tr:hover td { background: var(--slate-50); }
+
+      /* Landing Page Specifics */
+      .landing-page { margin-left: 0; background: var(--white); }
+      .landing-nav { padding: var(--space-6) var(--space-10); display: flex; justify-content: space-between; align-items: center; }
+      .hero { padding: 6rem 2rem; text-align: center; background: radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.05) 0%, transparent 50%); }
+      .hero h1 { font-size: 3.5rem; margin-bottom: 1.5rem; background: linear-gradient(to right, var(--slate-900), var(--primary-600)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+      .hero p { font-size: 1.25rem; max-width: 600px; margin: 0 auto 2.5rem; color: var(--slate-500); }
+      .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; padding: 4rem 10%; background: var(--slate-50); }
+      .feature-card { background: white; padding: 2rem; border-radius: var(--radius-2xl); border: 1px solid var(--slate-100); }
+
+      /* Modal */
+      .modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px); z-index: 100; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity var(--transition-base); }
+      .modal-overlay.open { opacity: 1; pointer-events: auto; }
+      .modal { background: white; width: 100%; max-width: 480px; border-radius: var(--radius-2xl); padding: var(--space-8); box-shadow: var(--shadow-2xl); transform: scale(0.95); transition: transform var(--transition-base); }
+      .modal-overlay.open .modal { transform: scale(1); }
+
+      /* Toast */
+      .toast-container { position: fixed; bottom: 2rem; right: 2rem; z-index: 200; display: flex; flex-direction: column; gap: 1rem; }
+      .toast { background: white; padding: 1rem 1.5rem; border-radius: var(--radius-xl); box-shadow: var(--shadow-xl); border: 1px solid var(--slate-100); display: flex; align-items: center; gap: 0.75rem; transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+      .toast.show { transform: translateX(0); }
+      .toast-success { border-left: 4px solid var(--accent-emerald); }
+      .toast-error { border-left: 4px solid var(--accent-rose); }
+
+      /* Animations */
+      @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+      .animate-pulse { animation: pulse 2s infinite; }
+
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .spin { animation: spin 1s linear infinite; }
+
+      /* Loading State */
+      .skeleton { background: var(--slate-100); border-radius: 4px; color: transparent !important; }
+      .skeleton-text { height: 1em; width: 100%; display: inline-block; margin-bottom: 0.5em; }
+      .skeleton-block { height: 100px; width: 100%; }
+
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar { width: 8px; height: 8px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: var(--slate-200); border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: var(--slate-300); }
+
+      /* Responsive */
+      @media (max-width: 1024px) {
+          .sidebar { transform: translateX(-100%); transition: transform var(--transition-base); }
+          .sidebar.mobile-open { transform: translateX(0); }
+          .main-content { margin-left: 0; }
+          .dashboard-grid { grid-template-columns: 1fr; }
+          .col-span-12, .col-span-8, .col-span-4, .col-span-6, .col-span-3 { grid-column: span 1; }
+          .wizard-layout { flex-direction: column; }
+          .wizard-steps { width: 100%; display: flex; overflow-x: auto; gap: 2rem; padding-bottom: 1rem; }
+          .hero h1 { font-size: 2.5rem; }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Modal (Wallet Connect) -->
+    <div class="modal-overlay" id="walletModal">
+      <div class="modal">
+        <div
+          class="card-header"
+          style="border: none; padding: 0; margin-bottom: 1.5rem"
+        >
+          <h3 class="card-title" style="font-size: 1.5rem">Connect Wallet</h3>
+        </div>
+        <p style="margin-bottom: 2rem">
+          Select your preferred wallet to access the Aegis Protocol
+          decentralized network.
+        </p>
+        <div class="flex flex-col gap-3">
+          <button
+            class="btn btn-secondary w-full"
+            style="justify-content: flex-start; padding: 1rem"
+            onclick="connectWallet('MetaMask')"
+          >
+            <img
+              src="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg"
+              width="24"
+              alt="Metamask"
+            />
+            <span class="font-medium">MetaMask</span>
+          </button>
+          <button
+            class="btn btn-secondary w-full"
+            style="justify-content: flex-start; padding: 1rem"
+            onclick="connectWallet('WalletConnect')"
+          >
+            <img
+              src="https://avatars.githubusercontent.com/u/37784886?s=200&v=4"
+              width="24"
+              alt="WalletConnect"
+            />
+            <span class="font-medium">WalletConnect</span>
+          </button>
+          <button
+            class="btn btn-secondary w-full"
+            style="justify-content: flex-start; padding: 1rem"
+            onclick="connectWallet('Coinbase')"
+          >
+            <img
+              src="https://avatars.githubusercontent.com/u/18060234?s=200&v=4"
+              width="24"
+              alt="Coinbase"
+            />
+            <span class="font-medium">Coinbase Wallet</span>
+          </button>
+        </div>
+        <button
+          class="btn btn-ghost w-full"
+          style="margin-top: 1.5rem"
+          onclick="closeModal('walletModal')"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+
+    <!-- Modal (Generic Confirmation) -->
+    <div class="modal-overlay" id="confirmModal">
+      <div class="modal">
+        <div
+          class="card-header"
+          style="border: none; padding: 0; margin-bottom: 1rem"
+        >
+          <h3 class="card-title text-rose" id="confirmTitle">Confirm Action</h3>
+        </div>
+        <p id="confirmMessage" style="margin-bottom: 2rem">
+          Are you sure you want to proceed? This action is irreversible.
+        </p>
+        <div class="flex gap-3">
+          <button
+            class="btn btn-secondary w-full"
+            onclick="closeModal('confirmModal')"
+          >
+            Cancel
+          </button>
+          <button class="btn btn-danger w-full" id="confirmActionBtn">
+            Confirm
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- App Router -->
+    <div id="app">
+      <!-- Content injected by JS -->
+    </div>
+
+    <script>
+      // =========================================
+      // STATE MANAGEMENT & ROUTER
+      // =========================================
+
+      const state = {
+        currentPage: "landing",
+        walletConnected: false,
+        walletAddress: null,
+        network: "Ethereum Mainnet",
+        user: {
+          name: "Alex Web3",
+          email: "alex@aegis.io",
+          avatar: "https://picsum.photos/seed/alexweb3/100/100",
+        },
+        vaults: [
+          {
+            id: 1,
+            name: "Family Seed Phrases",
+            heir: "0x123...abc",
+            status: "Active",
+            lastPing: "2 days ago",
+            inactivityTimer: "90 days",
+          },
+          {
+            id: 2,
+            name: "Passport & Will",
+            heir: "0x456...def",
+            status: "Active",
+            lastPing: "5 hours ago",
+            inactivityTimer: "180 days",
+          },
+          {
+            id: 3,
+            name: "Crypto Keys",
+            heir: "0x789...ghi",
+            status: "Locked",
+            lastPing: "1 year ago",
+            inactivityTimer: "365 days",
+          },
+        ],
+        activities: [
+          {
+            type: "VaultCreated",
+            desc: 'Created "Family Seed Phrases"',
+            date: "2 mins ago",
+            hash: "0x8a2...3f1",
+          },
+          {
+            type: "PingExecuted",
+            desc: "Proof of Life verified",
+            date: "2 days ago",
+            hash: "0x1b2...9c4",
+          },
+          {
+            type: "HeirAssigned",
+            desc: "Added heir 0x123...abc",
+            date: "3 days ago",
+            hash: "0x5e6...7d8",
+          },
+        ],
+      };
+
+      // =========================================
+      // COMPONENT RENDERERS
+      // =========================================
+
+      function renderSidebar() {
+        if (state.currentPage === "landing") return "";
+
+        const navItems = [
+          { id: "dashboard", icon: "ri-dashboard-line", label: "Dashboard" },
+          { id: "vaults", icon: "ri-safe-2-line", label: "My Vaults" },
+          { id: "create", icon: "ri-add-circle-line", label: "Create Vault" },
+          { id: "heir", icon: "ri-user-heart-line", label: "Heir Inbox" },
+          { id: "activity", icon: "ri-list-check-2", label: "Activity" },
+          { id: "security", icon: "ri-shield-check-line", label: "Security" },
+          { id: "settings", icon: "ri-settings-4-line", label: "Settings" },
+        ];
+
+        return `
+                <aside class="sidebar" id="sidebar">
+                    <div class="logo-area">
+                        <div class="logo-icon"><i class="ri-shield-keyhole-fill"></i></div>
+                        <span class="font-bold" style="font-size: 1.25rem; color: var(--slate-900);">Aegis</span>
+                    </div>
+                    <nav class="nav-links">
+                        ${navItems
+                          .map(
+                            (item) => `
+                            <a class="nav-item ${state.currentPage === item.id ? "active" : ""}" onclick="navigate('${item.id}')">
+                                <i class="${item.icon}"></i>
+                                ${item.label}
+                            </a>
+                        `,
+                          )
+                          .join("")}
+                    </nav>
+                    <div class="user-profile">
+                        <img src="${state.user.avatar}" class="avatar" alt="User">
+                        <div class="flex flex-col">
+                            <span class="font-bold text-small">${state.user.name}</span>
+                            <span class="text-tiny text-primary">View Profile</span>
+                        </div>
+                        <i class="ri-more-2-fill" style="margin-left: auto; color: var(--slate-400);"></i>
+                    </div>
+                </aside>
+            `;
+      }
+
+      function renderHeader() {
+        if (state.currentPage === "landing") return "";
+
+        return `
+                <header class="top-header">
+                    <div class="flex items-center gap-4">
+                        <button class="icon-btn" onclick="toggleSidebar()" style="display: none; @media (max-width: 1024px) { display: flex; }">
+                            <i class="ri-menu-line"></i>
+                        </button>
+                        <div class="network-status">
+                            <div class="network-dot"></div>
+                            ${state.network}
+                        </div>
+                    </div>
+                    
+                    <div class="header-actions">
+                        <button class="icon-btn notification-dot"><i class="ri-notification-3-line"></i></button>
+                        ${
+                          state.walletConnected
+                            ? `<button class="wallet-btn"><i class="ri-wallet-3-line"></i> ${state.walletAddress.slice(0, 6)}...${state.walletAddress.slice(-4)}</button>`
+                            : `<button class="btn btn-primary" onclick="openModal('walletModal')">Connect Wallet</button>`
+                        }
+                    </div>
+                </header>
+            `;
+      }
+
+      function renderLanding() {
+        return `
+                <div class="landing-page">
+                    <nav class="landing-nav">
+                        <div class="flex items-center gap-2">
+                            <div class="logo-icon"><i class="ri-shield-keyhole-fill"></i></div>
+                            <span class="font-bold" style="font-size: 1.5rem; color: var(--slate-900);">Aegis Protocol</span>
+                        </div>
+                        <div class="flex gap-4">
+                            <button class="btn btn-ghost" onclick="navigate('dashboard')">Dashboard</button>
+                            <button class="btn btn-primary" onclick="openModal('walletModal')">Launch App</button>
+                        </div>
+                    </nav>
+                    <section class="hero">
+                        <h1>Secure Your Digital Legacy<br>on the Blockchain</h1>
+                        <p>The decentralized inheritance protocol. Encrypt your sensitive data, assign heirs, and ensure seamless transfer of your digital assets upon inactivity.</p>
+                        <div class="flex justify-center gap-4">
+                            <button class="btn btn-primary btn-lg" onclick="openModal('walletModal')">Create Protocol</button>
+                            <button class="btn btn-secondary btn-lg">Read Documentation</button>
+                        </div>
+                        <div style="margin-top: 4rem;">
+                            <img src="https://picsum.photos/seed/tech/1000/500" style="border-radius: var(--radius-2xl); box-shadow: var(--shadow-xl); opacity: 0.9;" alt="Dashboard Preview">
+                        </div>
+                    </section>
+                    <section class="features-grid">
+                        <div class="feature-card">
+                            <i class="ri-lock-2-fill" style="font-size: 2rem; color: var(--primary-600); margin-bottom: 1rem;"></i>
+                            <h3 style="margin-bottom: 0.5rem;">AES-256 Encryption</h3>
+                            <p>Your documents are encrypted locally before being fragmented and stored on IPFS.</p>
+                        </div>
+                        <div class="feature-card">
+                            <i class="ri-time-fill" style="font-size: 2rem; color: var(--accent-emerald); margin-bottom: 1rem;"></i>
+                            <h3 style="margin-bottom: 0.5rem;">Inactivity Timers</h3>
+                            <p>Smart contracts monitor your wallet activity. No ping for X days triggers heir access.</p>
+                        </div>
+                        <div class="feature-card">
+                            <i class="ri-smartphone-line" style="font-size: 2rem; color: var(--accent-cyan); margin-bottom: 1rem;"></i>
+                            <h3 style="margin-bottom: 0.5rem;">Proof of Life</h3>
+                            <p>Simple "I'm Alive" heartbeat signature to reset your timers and keep vaults secure.</p>
+                        </div>
+                    </section>
+                </div>
+            `;
+      }
+
+      function renderDashboard() {
+        return `
+                <div class="page-container">
+                    <div class="page-header">
+                        <div>
+                            <div class="breadcrumbs">
+                                <span class="breadcrumb-item">Home</span>
+                                <span>/</span>
+                                <span class="breadcrumb-active">Dashboard</span>
+                            </div>
+                            <h1>Overview</h1>
+                            <p>Welcome back, ${state.user.name}. Your digital legacy is secure.</p>
+                        </div>
+                        <button class="btn btn-primary" onclick="navigate('create')">
+                            <i class="ri-add-line"></i> New Vault
+                        </button>
+                    </div>
+
+                    <div class="dashboard-grid">
+                        <!-- Stat Cards -->
+                        <div class="card col-span-3 stat-card">
+                            <div>
+                                <div class="stat-label">Total Vaults</div>
+                                <div class="stat-value">3</div>
+                                <div class="text-emerald text-small font-medium"><i class="ri-arrow-up-line"></i> 1 this month</div>
+                            </div>
+                            <div class="stat-icon bg-blue-soft"><i class="ri-safe-2-line"></i></div>
+                        </div>
+                        <div class="card col-span-3 stat-card">
+                            <div>
+                                <div class="stat-label">Heirs Assigned</div>
+                                <div class="stat-value">3</div>
+                                <div class="text-slate-500 text-small">Verified on-chain</div>
+                            </div>
+                            <div class="stat-icon bg-emerald-soft"><i class="ri-user-heart-line"></i></div>
+                        </div>
+                        <div class="card col-span-3 stat-card">
+                            <div>
+                                <div class="stat-label">Security Score</div>
+                                <div class="stat-value">98%</div>
+                                <div class="text-emerald text-small font-medium">Excellent</div>
+                            </div>
+                            <div class="stat-icon bg-purple-soft"><i class="ri-shield-check-line"></i></div>
+                        </div>
+                        <div class="card col-span-3 stat-card">
+                            <div>
+                                <div class="stat-label">Gas Spent</div>
+                                <div class="stat-value">0.4</div>
+                                <div class="text-slate-500 text-small">ETH Total</div>
+                            </div>
+                            <div class="stat-icon bg-rose-soft"><i class="ri-gas-station-line"></i></div>
+                        </div>
+
+                        <!-- Vital Action: Proof of Life -->
+                        <div class="card col-span-8" style="background: linear-gradient(135deg, var(--slate-900) 0%, var(--slate-800) 100%); color: white; border: none;">
+                            <div class="flex justify-between items-center h-full">
+                                <div class="flex flex-col gap-4">
+                                    <h3 style="color: white;"><i class="ri-heart-pulse-fill text-rose" style="animation: pulse 2s infinite;"></i> Proof of Life Required</h3>
+                                    <p style="color: var(--slate-400); max-width: 400px;">Your vault "Family Seed Phrases" requires a heartbeat signature within the next 48 hours to prevent triggering heir access.</p>
+                                    <div class="flex gap-4">
+                                        <button class="btn btn-primary" style="box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);" onclick="showToast('Heartbeat signature sent to blockchain!', 'success')">
+                                            Send Heartbeat
+                                        </button>
+                                        <button class="btn btn-ghost" style="color: var(--slate-300); border: 1px solid var(--slate-700);">Configure Timer</button>
+                                    </div>
+                                </div>
+                                <div style="text-align: right; opacity: 0.8;">
+                                    <div class="text-tiny uppercase tracking-wider text-slate-400">Time Remaining</div>
+                                    <div style="font-size: 2.5rem; font-weight: 700; font-variant-numeric: tabular-nums;">47:23:12</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Recent Activity -->
+                        <div class="card col-span-4">
+                            <div class="card-header">
+                                <h4 class="card-title">Recent Activity</h4>
+                            </div>
+                            <div class="flex flex-col gap-4">
+                                ${state.activities
+                                  .map(
+                                    (act) => `
+                                    <div class="flex gap-3 items-start">
+                                        <div style="background: var(--slate-100); width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                            <i class="ri-links-line" style="color: var(--slate-500);"></i>
+                                        </div>
+                                        <div>
+                                            <div class="text-small font-medium">${act.desc}</div>
+                                            <div class="text-tiny text-slate-400">${act.date}</div>
+                                        </div>
+                                    </div>
+                                `,
+                                  )
+                                  .join("")}
+                            </div>
+                            <button class="btn btn-ghost w-full" style="margin-top: 1rem;" onclick="navigate('activity')">View All Activity</button>
+                        </div>
+
+                        <!-- Vaults Preview -->
+                        <div class="card col-span-12">
+                            <div class="card-header">
+                                <h4 class="card-title">Active Vaults</h4>
+                                <button class="btn btn-ghost text-small" onclick="navigate('vaults')">Manage All</button>
+                            </div>
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Vault Name</th>
+                                            <th>Heir Address</th>
+                                            <th>Status</th>
+                                            <th>Last Ping</th>
+                                            <th>Trigger Timer</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${state.vaults
+                                          .map(
+                                            (v) => `
+                                            <tr>
+                                                <td class="font-medium">${v.name}</td>
+                                                <td class="font-mono text-tiny">${v.heir}</td>
+                                                <td><span class="badge ${v.status === "Active" ? "badge-emerald" : "badge-rose"}">${v.status}</span></td>
+                                                <td>${v.lastPing}</td>
+                                                <td>${v.inactivityTimer}</td>
+                                                <td><button class="btn btn-ghost" style="padding: 0.25rem;"><i class="ri-more-2-fill"></i></button></td>
+                                            </tr>
+                                        `,
+                                          )
+                                          .join("")}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+      }
+
+      function renderVaults() {
+        return `
+                <div class="page-container">
+                    <div class="page-header">
+                        <div>
+                            <div class="breadcrumbs">
+                                <span class="breadcrumb-item" onclick="navigate('dashboard')">Home</span>
+                                <span>/</span>
+                                <span class="breadcrumb-active">My Vaults</span>
+                            </div>
+                            <h1>Digital Vaults</h1>
+                            <p>Manage your encrypted assets and heir assignments.</p>
+                        </div>
+                        <button class="btn btn-primary" onclick="navigate('create')">
+                            <i class="ri-add-line"></i> Create Vault
+                        </button>
+                    </div>
+
+                    <div class="flex flex-col gap-4">
+                        ${state.vaults
+                          .map(
+                            (v) => `
+                            <div class="vault-item">
+                                <div class="vault-info">
+                                    <div class="vault-icon">
+                                        <i class="ri-file-zip-line"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="font-bold text-primary">${v.name}</h3>
+                                        <div class="text-small text-slate-500">Heir: <span class="font-mono">${v.heir}</span></div>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-6">
+                                    <div class="text-right">
+                                        <div class="text-tiny text-slate-400">Status</div>
+                                        <span class="badge ${v.status === "Active" ? "badge-emerald" : "badge-rose"}">${v.status}</span>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="text-tiny text-slate-400">Safety Window</div>
+                                        <div class="font-medium">${v.inactivityTimer}</div>
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <button class="btn btn-secondary" onclick="showToast('Opening settings for ${v.name}...', 'success')">Settings</button>
+                                        <button class="btn btn-ghost"><i class="ri-arrow-right-s-line"></i></button>
+                                    </div>
+                                </div>
+                            </div>
+                        `,
+                          )
+                          .join("")}
+                    </div>
+                </div>
+            `;
+      }
+
+      function renderWizard() {
+        // Simplified wizard state for demo
+        const step = 1;
+
+        return `
+                <div class="page-container">
+                    <div class="page-header">
+                         <div>
+                            <div class="breadcrumbs">
+                                <span class="breadcrumb-item" onclick="navigate('vaults')">My Vaults</span>
+                                <span>/</span>
+                                <span class="breadcrumb-active">Create New Vault</span>
+                            </div>
+                            <h1>Create New Vault</h1>
+                        </div>
+                    </div>
+
+                    <div class="wizard-layout">
+                        <div class="wizard-steps">
+                            <div class="step-indicator active">
+                                <div class="step-number">1</div>
+                                <div class="font-medium">Heir Info</div>
+                            </div>
+                            <div class="step-indicator">
+                                <div class="step-number">2</div>
+                                <div class="font-medium">Upload Data</div>
+                            </div>
+                            <div class="step-indicator">
+                                <div class="step-number">3</div>
+                                <div class="font-medium">Encryption</div>
+                            </div>
+                            <div class="step-indicator">
+                                <div class="step-number">4</div>
+                                <div class="font-medium">Timer Config</div>
+                            </div>
+                            <div class="step-indicator">
+                                <div class="step-number">5</div>
+                                <div class="font-medium">Confirm</div>
+                            </div>
+                        </div>
+
+                        <div class="wizard-content">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3 class="card-title">Step 1: Assign Heir</h3>
+                                    <p>Enter the wallet address of the beneficiary who will receive access if you become inactive.</p>
+                                </div>
+                                <div class="input-group">
+                                    <label class="label">Heir Wallet Address (0x...)</label>
+                                    <input type="text" class="input" placeholder="0x...">
+                                    <p class="text-tiny text-slate-400" style="margin-top: 0.5rem;">Must be an Ethereum EOA wallet.</p>
+                                </div>
+                                <div class="input-group">
+                                    <label class="label">Vault Name</label>
+                                    <input type="text" class="input" placeholder="e.g. Seed Phrases Backup">
+                                </div>
+                                
+                                <div style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 1rem;">
+                                    <button class="btn btn-secondary" onclick="navigate('vaults')">Cancel</button>
+                                    <button class="btn btn-primary" onclick="showToast('Proceeding to Step 2...', 'success')">Next Step</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+      }
+
+      function renderActivity() {
+        return `
+                <div class="page-container">
+                    <div class="page-header">
+                        <div>
+                            <div class="breadcrumbs">
+                                <span class="breadcrumb-item" onclick="navigate('dashboard')">Home</span>
+                                <span>/</span>
+                                <span class="breadcrumb-active">Activity Explorer</span>
+                            </div>
+                            <h1>Blockchain Activity</h1>
+                            <p>Real-time logs of smart contract interactions.</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <div class="input" style="width: 250px; display: flex; align-items: center; gap: 0.5rem;">
+                                <i class="ri-search-line text-slate-400"></i>
+                                <input type="text" placeholder="Search hash..." style="border: none; outline: none; background: transparent; width: 100%;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Event Type</th>
+                                        <th>Tx Hash</th>
+                                        <th>Block</th>
+                                        <th>Age</th>
+                                        <th>Gas Used</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${state.activities
+                                      .map(
+                                        (a) => `
+                                        <tr>
+                                            <td><span class="badge badge-blue">${a.type}</span></td>
+                                            <td class="font-mono text-tiny">${a.hash}</td>
+                                            <td>18293021</td>
+                                            <td>${a.date}</td>
+                                            <td>0.0024 ETH</td>
+                                            <td><i class="ri-checkbox-circle-fill text-emerald"></i> Success</td>
+                                        </tr>
+                                    `,
+                                      )
+                                      .join("")}
+                                    <!-- Mock more rows -->
+                                    <tr>
+                                        <td><span class="badge badge-blue">PingExecuted</span></td>
+                                        <td class="font-mono text-tiny">0x99a...1b2</td>
+                                        <td>18291000</td>
+                                        <td>5 days ago</td>
+                                        <td>0.0018 ETH</td>
+                                        <td><i class="ri-checkbox-circle-fill text-emerald"></i> Success</td>
+                                    </tr>
+                                     <tr>
+                                        <td><span class="badge badge-blue">VaultCreated</span></td>
+                                        <td class="font-mono text-tiny">0x33c...4d5</td>
+                                        <td>18288000</td>
+                                        <td>1 week ago</td>
+                                        <td>0.0050 ETH</td>
+                                        <td><i class="ri-checkbox-circle-fill text-emerald"></i> Success</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="flex justify-between items-center" style="padding: 1rem; border-top: 1px solid var(--slate-100);">
+                            <span class="text-tiny text-slate-500">Showing 5 of 24 transactions</span>
+                            <div class="flex gap-2">
+                                <button class="btn btn-secondary" style="padding: 0.25rem 0.75rem;" disabled>Previous</button>
+                                <button class="btn btn-secondary" style="padding: 0.25rem 0.75rem;">Next</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+      }
+
+      function renderSettings() {
+        return `
+                <div class="page-container">
+                    <div class="page-header">
+                        <div>
+                            <div class="breadcrumbs">
+                                <span class="breadcrumb-item" onclick="navigate('dashboard')">Home</span>
+                                <span>/</span>
+                                <span class="breadcrumb-active">Settings</span>
+                            </div>
+                            <h1>Settings</h1>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid">
+                        <div class="card col-span-4">
+                            <div class="flex flex-col items-center" style="text-align: center;">
+                                <img src="${state.user.avatar}" style="width: 100px; height: 100px; border-radius: 50%; margin-bottom: 1rem; border: 4px solid var(--slate-100);">
+                                <h3>${state.user.name}</h3>
+                                <p class="text-small text-slate-500">${state.user.email}</p>
+                                <button class="btn btn-secondary" style="margin-top: 1rem;">Edit Profile</button>
+                            </div>
+                        </div>
+
+                        <div class="card col-span-8">
+                            <div class="card-header">
+                                <h4 class="card-title">Preferences</h4>
+                            </div>
+                            <div class="flex flex-col gap-6">
+                                <div class="flex justify-between items-center">
+                                    <div>
+                                        <div class="font-medium">Email Notifications</div>
+                                        <div class="text-tiny text-slate-500">Receive alerts when vault timers are low.</div>
+                                    </div>
+                                    <div style="width: 40px; height: 24px; background: var(--primary-600); border-radius: 12px; position: relative; cursor: pointer;">
+                                        <div style="width: 20px; height: 20px; background: white; border-radius: 50%; position: absolute; top: 2px; right: 2px;"></div>
+                                    </div>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <div>
+                                        <div class="font-medium">Gas Optimization</div>
+                                        <div class="text-tiny text-slate-500">Automatically batch transactions to save fees.</div>
+                                    </div>
+                                    <div style="width: 40px; height: 24px; background: var(--slate-200); border-radius: 12px; position: relative; cursor: pointer;">
+                                        <div style="width: 20px; height: 20px; background: white; border-radius: 50%; position: absolute; top: 2px; left: 2px;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+      }
+
+      // =========================================
+      // APP CONTROLLER
+      // =========================================
+
+      const app = document.getElementById("app");
+
+      function navigate(pageId) {
+        state.currentPage = pageId;
+        window.scrollTo(0, 0);
+        render();
+
+        // Mobile sidebar auto-close
+        const sidebar = document.getElementById("sidebar");
+        if (sidebar) sidebar.classList.remove("mobile-open");
+      }
+
+      function render() {
+        let content = "";
+
+        // Main Layout wrapper
+        if (state.currentPage !== "landing") {
+          content += `
+                    <div class="flex h-full bg-slate-50">
+                        ${renderSidebar()}
+                        <div class="main-content">
+                            ${renderHeader()}
+                            <div class="flex-1 overflow-y-auto">
+                `;
+        }
+
+        // Page Routing
+        switch (state.currentPage) {
+          case "landing":
+            content += renderLanding();
+            break;
+          case "dashboard":
+            content += renderDashboard();
+            break;
+          case "vaults":
+            content += renderVaults();
+            break;
+          case "create":
+            content += renderWizard();
+            break;
+          case "activity":
+            content += renderActivity();
+            break;
+          case "security":
+            content += renderSettings();
+            break; // Reusing settings layout for demo
+          case "heir":
+            content += renderDashboard();
+            break; // Heir view similar to dashboard for demo
+          case "settings":
+            content += renderSettings();
+            break;
+          default:
+            content += renderDashboard();
+        }
+
+        if (state.currentPage !== "landing") {
+          content += `
+                            </div>
+                        </div>
+                    </div>
+                `;
+        }
+
+        app.innerHTML = content;
+      }
+
+      // =========================================
+      // INTERACTION HANDLERS
+      // =========================================
+
+      function openModal(id) {
+        document.getElementById(id).classList.add("open");
+      }
+
+      function closeModal(id) {
+        document.getElementById(id).classList.remove("open");
+      }
+
+      function connectWallet(provider) {
+        closeModal("walletModal");
+        showToast(`Connecting to ${provider}...`, "success");
+
+        // Simulate connection delay
+        setTimeout(() => {
+          state.walletConnected = true;
+          state.walletAddress = "0x71C...9A23";
+          if (state.currentPage === "landing") navigate("dashboard");
+          else render();
+          showToast("Wallet Connected Successfully", "success");
+        }, 1500);
+      }
+
+      function toggleSidebar() {
+        document.getElementById("sidebar").classList.toggle("mobile-open");
+      }
+
+      function showToast(message, type = "success") {
+        const container = document.getElementById("toastContainer");
+        const toast = document.createElement("div");
+        toast.className = `toast toast-${type}`;
+
+        const icon =
+          type === "success"
+            ? "ri-checkbox-circle-fill text-emerald"
+            : "ri-error-warning-fill text-rose";
+
+        toast.innerHTML = `
+                <i class="${icon}" style="font-size: 1.25rem;"></i>
+                <span class="font-medium text-small">${message}</span>
+            `;
+
+        container.appendChild(toast);
+
+        // Animate in
+        requestAnimationFrame(() => {
+          toast.classList.add("show");
+        });
+
+        // Remove after 3s
+        setTimeout(() => {
+          toast.classList.remove("show");
+          setTimeout(() => toast.remove(), 300);
+        }, 3000);
+      }
+
+      // Initialize
+      document.addEventListener("DOMContentLoaded", () => {
+        render();
+      });
+    </script>
+  </body>
+</html>
