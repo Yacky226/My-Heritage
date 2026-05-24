@@ -1,14 +1,24 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import type { Address } from 'viem';
 import { useWallet } from './useWallet';
-import { useVaults } from './useVaults';
+import { useAegisVault } from './useAegisVault';
 import { useToast } from './useToast';
+import { formatTimeRemaining } from '../utils/format';
+import type { ClaimStatus } from '../types';
 
-export interface SimulatedClaim {
+export interface HeirClaim {
   vaultId: string;
   vaultName: string;
   owner: string;
-  status: 'Active' | 'Locked' | 'Cooldown' | 'Claimed';
-  cooldownRemaining: number; // seconds
+  heir: string;
+  status: ClaimStatus;
+  canClaim: boolean;
+  revoked: boolean;
+  locked: boolean;
+  ipfsCid?: string;
+  lastPingTimestamp: number;
+  unlockTimestamp: number;
+  secondsUntilUnlock: number;
   fileCount: number;
   fileSize: string;
   description?: string;
@@ -16,137 +26,130 @@ export interface SimulatedClaim {
 }
 
 export function useClaims() {
-  const { wallet, signMessageSimulated } = useWallet();
-  const { vaults, addActivity } = useVaults();
+  const { wallet } = useWallet();
   const { addToast } = useToast();
-
-  const [activeClaims, setActiveClaims] = useState<Record<string, { status: 'Cooldown' | 'Claimed'; cooldownRemaining: number }>>(() => {
-    const saved = localStorage.getItem('aegis_claims_progress');
-    return saved ? JSON.parse(saved) : {};
-  });
+  const aegisVault = useAegisVault(null, wallet.address as Address | null);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    localStorage.setItem('aegis_claims_progress', JSON.stringify(activeClaims));
-  }, [activeClaims]);
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
 
-  // Tick claim cooldown timers every second
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveClaims((prev) => {
-        let changed = false;
-        const next = { ...prev };
-
-        Object.keys(next).forEach((vaultId) => {
-          const claimState = next[vaultId];
-          if (claimState.status === 'Cooldown') {
-            changed = true;
-            if (claimState.cooldownRemaining <= 1) {
-              // Cooldown finished! Ready to decrypt
-              next[vaultId] = {
-                status: 'Claimed',
-                cooldownRemaining: 0,
-              };
-              addToast(`Claim cooldown for vault completed! Ready to decrypt files.`, 'success', 4000);
-            } else {
-              next[vaultId] = {
-                ...claimState,
-                cooldownRemaining: claimState.cooldownRemaining - 1,
-              };
-            }
-          }
-        });
-
-        return changed ? next : prev;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [addToast]);
-
-  // Get inheritances where user is designated heir
-  const getInheritances = useCallback((): SimulatedClaim[] => {
+  const getInheritances = useCallback((): HeirClaim[] => {
     if (!wallet.connected || !wallet.address) return [];
 
-    return vaults
-      .filter((vault) => {
-        // Match user's connected wallet address with designated heir address
-        // Handle case-insensitivity and standard mock addresses
-        const userAddr = wallet.address?.toLowerCase();
-        const heirAddr = vault.heir.toLowerCase();
-        
-        // Return true if it matches exactly or if user connected provider and address contains letters
-        return heirAddr.slice(0, 8) === userAddr?.slice(0, 8) || heirAddr === userAddr;
-      })
-      .map((vault) => {
-        const progress = activeClaims[vault.id];
-        
-        let status: 'Active' | 'Locked' | 'Cooldown' | 'Claimed' = vault.status;
-        if (progress) {
-          status = progress.status;
-        }
+    return aegisVault.heirVaults.map((vault) => {
+      const unlockTimestamp = vault.unlockTimestamp ?? vault.lastPingTimestamp;
+      const secondsUntilUnlock = Math.max(
+        0,
+        Math.ceil((unlockTimestamp - now) / 1000),
+      );
+      const canClaim = Boolean(
+        !vault.revoked &&
+        !vault.claimed &&
+        now > unlockTimestamp,
+      );
+      const status: ClaimStatus = vault.claimed
+        ? 'Claimed'
+        : vault.revoked || canClaim
+          ? 'Locked'
+          : 'Active';
 
-        return {
-          vaultId: vault.id,
-          vaultName: vault.name,
-          owner: '0x2b3c...4a5e', // Simulated owner address
-          status,
-          cooldownRemaining: progress?.cooldownRemaining || 0,
-          fileCount: vault.fileCount,
-          fileSize: vault.fileSize,
-          description: vault.description,
-          files: vault.files,
-        };
-      });
-  }, [vaults, wallet.connected, wallet.address, activeClaims]);
+      return {
+        vaultId: vault.id,
+        vaultName: vault.name,
+        owner: vault.owner ?? '',
+        heir: vault.heir,
+        status,
+        canClaim,
+        revoked: Boolean(vault.revoked),
+        locked: Boolean(vault.locked),
+        ipfsCid: vault.ipfsCid,
+        lastPingTimestamp: vault.lastPingTimestamp,
+        unlockTimestamp,
+        secondsUntilUnlock,
+        fileCount: vault.fileCount,
+        fileSize: vault.fileSize,
+        description: vault.description,
+        files: vault.files?.map((file) => ({
+          name: file.name,
+          size: file.size,
+        })),
+      };
+    });
+  }, [
+    aegisVault.heirVaults,
+    wallet.connected,
+    wallet.address,
+    now,
+  ]);
 
-  const initiateClaim = useCallback(async (vaultId: string) => {
-    const vault = vaults.find((v) => v.id === vaultId);
-    if (!vault) return;
+  const initiateClaim = useCallback(
+    async (vaultId: string): Promise<boolean> => {
+      if (!wallet.connected || !wallet.address) {
+        addToast('Please connect your wallet first', 'error', 3000);
+        return false;
+      }
 
-    const sig = await signMessageSimulated(`Initiate claim request on smart contract for vault: ${vault.name}`);
-    if (!sig) return;
+      const vault = aegisVault.heirVaults.find((item) => item.id === vaultId);
 
-    addToast('Broadcasting inheritance claim request to blockchain...', 'info', 1500);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+      if (!vault) {
+        addToast('Inheritance vault not found for this wallet', 'error', 3000);
+        return false;
+      }
 
-    // Cooldown is set to 15 seconds for demonstration purposes
-    setActiveClaims((prev) => ({
-      ...prev,
-      [vaultId]: {
-        status: 'Cooldown',
-        cooldownRemaining: 15,
-      },
-    }));
+      if (vault.revoked) {
+        addToast('This vault was revoked by its owner', 'error', 3000);
+        return false;
+      }
 
-    addActivity('ClaimInitiated', `Claim initiated by heir for vault "${vault.name}"`);
-    addToast('Inheritance claim pending. Safety cooldown active.', 'success', 3000);
-  }, [vaults, signMessageSimulated, addToast, addActivity]);
+      if (vault.claimed) {
+        addToast('This vault has already been claimed', 'info', 3000);
+        return false;
+      }
 
-  const decryptClaimFiles = useCallback(async (_vaultId: string, passphraseSeed: string): Promise<boolean> => {
-    if (!passphraseSeed) {
-      addToast('Security passphrase seed is required to derive decryption key', 'error', 3000);
-      return false;
-    }
+      const unlockTimestamp = vault.unlockTimestamp ?? vault.lastPingTimestamp;
+      const claimableNow = Date.now() > unlockTimestamp;
 
-    addToast('Deriving local key using PBKDF2...', 'info', 1000);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    
-    addToast('Recombining IPFS encrypted shards...', 'info', 1000);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (!claimableNow) {
+        const secondsUntilUnlock = Math.max(
+          0,
+          Math.ceil((unlockTimestamp - Date.now()) / 1000),
+        );
+        addToast(
+          `Owner is still active. Unlock window opens in ${formatTimeRemaining(secondsUntilUnlock)}.`,
+          'info',
+          4000,
+        );
+        return false;
+      }
 
-    addToast('Decrypting package blocks locally...', 'info', 1200);
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-
-    addToast('Decompressing payload integrity verified!', 'success', 2000);
-    addActivity('VaultDecrypted', `Decrypted files for claimed vault`);
-
-    return true;
-  }, [addToast, addActivity]);
+      try {
+        addToast('Submitting inheritance claim transaction...', 'info', 2000);
+        await aegisVault.claimVault(BigInt(vaultId));
+        addToast('Vault claimed on-chain. IPFS recovery is now authorized.', 'success', 3500);
+        aegisVault.refetch();
+        return true;
+      } catch (error) {
+        console.error(error);
+        addToast('Claim transaction failed', 'error', 3000);
+        return false;
+      }
+    },
+    [
+      aegisVault,
+      addToast,
+      wallet.connected,
+      wallet.address,
+    ],
+  );
 
   return {
     getInheritances,
     initiateClaim,
-    decryptClaimFiles,
-    activeClaims,
+    isLoading: aegisVault.isLoading,
+    isClaiming: aegisVault.isWriting || aegisVault.isConfirming,
+    refetch: aegisVault.refetch,
   };
 }

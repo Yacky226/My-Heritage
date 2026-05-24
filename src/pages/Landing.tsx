@@ -141,10 +141,10 @@ export function Landing({ onLaunchApp }: LandingProps) {
                 <Lock className="w-5.5 h-5.5" />
               </div>
               <h3 className="font-bold text-lg text-white mb-2 leading-none">
-                AES-256 Encryption
+                Hybrid Encryption
               </h3>
               <p className="text-xs md:text-sm text-slate-400 leading-relaxed">
-                Your private secrets are encrypted locally in your browser sandbox using keys derived from local passphrase seeds. Decryption is impossible without the heir signature.
+                Your private secrets are encrypted locally with AES-256-GCM and wrapped to the heir ECDH public key before IPFS upload.
               </p>
             </div>
 

@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { usePublicClient } from 'wagmi';
+import { formatUnits } from 'viem';
 import { Card, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
 import { useToast } from '../hooks/useToast';
 import { useWallet } from '../hooks/useWallet';
+import { useAegisNotifications } from '../hooks/useAegisNotifications';
 import {
   Settings as SettingsIcon,
   User,
@@ -13,7 +15,12 @@ import {
   HelpCircle,
   Mail,
   Smartphone,
-  Globe
+  Globe,
+  Wallet,
+  Copy,
+  RefreshCw,
+  ShieldCheck,
+  Activity,
 } from 'lucide-react';
 import { sliceAddress } from '../utils/format';
 
@@ -21,283 +28,359 @@ interface SettingsProps {
   onNavigate: (pageId: string) => void;
 }
 
-type GasLevel = 'standard' | 'fast' | 'instant';
+type NetworkSnapshot = {
+  blockNumber: bigint;
+  gasPriceWei: bigint;
+  checkedAt: number;
+};
 
-export function Settings({ onNavigate: _onNavigate }: SettingsProps) {
+function getInAppNotificationKey(address?: string | null) {
+  return address
+    ? `aegis:in-app-notifications-enabled:${address.toLowerCase()}`
+    : 'aegis:in-app-notifications-enabled:disconnected';
+}
+
+function getDismissedNotificationsKey(address?: string | null) {
+  return address
+    ? `aegis:dismissed-notifications:${address.toLowerCase()}`
+    : 'aegis:dismissed-notifications:disconnected';
+}
+
+function readInAppNotificationsEnabled(storageKey: string) {
+  if (typeof window === 'undefined') return true;
+  return window.localStorage.getItem(storageKey) !== 'false';
+}
+
+function writeInAppNotificationsEnabled(storageKey: string, enabled: boolean) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(storageKey, String(enabled));
+  window.dispatchEvent(new Event('aegis-settings-updated'));
+}
+
+function clearDismissedNotifications(storageKey: string) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(storageKey);
+  window.dispatchEvent(new Event('aegis-settings-updated'));
+}
+
+function formatGwei(value: bigint) {
+  const gwei = Number(formatUnits(value, 9));
+  return `${gwei.toFixed(gwei >= 1 ? 2 : 4)} Gwei`;
+}
+
+export function Settings({ onNavigate }: SettingsProps) {
   const { addToast } = useToast();
-  const { wallet } = useWallet();
+  const { wallet, connectWallet } = useWallet();
+  const publicClient = usePublicClient();
+  const { unreadCount, urgentCount, isLoading: notificationsLoading } = useAegisNotifications();
 
-  // Profile Form States
-  const [profile, setProfile] = useState({
-    name: 'Alex Web3',
-    email: 'alex@aegis.io',
-    address: wallet.address || '0x71C6793Bfc6F0b7b1348EF853a479B4Cd0C09A23',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=256&h=256'
-  });
+  const notificationPreferenceKey = getInAppNotificationKey(wallet.address);
+  const dismissedNotificationsKey = getDismissedNotificationsKey(wallet.address);
+  const [, setSettingsRevision] = useState(0);
+  const inAppNotificationsEnabled = readInAppNotificationsEnabled(notificationPreferenceKey);
+  const [networkSnapshot, setNetworkSnapshot] = useState<NetworkSnapshot | null>(null);
+  const [networkError, setNetworkError] = useState('');
+  const [isRefreshingNetwork, setIsRefreshingNetwork] = useState(false);
 
-  // Notification states
-  const [notifs, setNotifs] = useState({
-    emailWarnings: true,
-    browserPings: true,
-    onChainReminders: false,
-    telegramPings: true
-  });
+  const refreshNetworkSnapshot = useCallback(async () => {
+    if (!publicClient) {
+      setNetworkSnapshot(null);
+      setNetworkError('No active RPC client available.');
+      return;
+    }
 
-  // Gas states
-  const [gasLevel, setGasLevel] = useState<GasLevel>('fast');
+    try {
+      setIsRefreshingNetwork(true);
+      setNetworkError('');
 
-  const handleProfileSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    addToast('Profile configuration saved successfully!', 'success', 2500);
+      const [gasPriceWei, blockNumber] = await Promise.all([
+        publicClient.getGasPrice(),
+        publicClient.getBlockNumber(),
+      ]);
+
+      setNetworkSnapshot({
+        gasPriceWei,
+        blockNumber,
+        checkedAt: Date.now(),
+      });
+    } catch (error) {
+      console.error(error);
+      setNetworkError(error instanceof Error ? error.message : 'Unable to read RPC fee data.');
+    } finally {
+      setIsRefreshingNetwork(false);
+    }
+  }, [publicClient]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      refreshNetworkSnapshot();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [refreshNetworkSnapshot]);
+
+  const handleToggleInAppNotifications = () => {
+    const nextValue = !inAppNotificationsEnabled;
+    writeInAppNotificationsEnabled(notificationPreferenceKey, nextValue);
+    setSettingsRevision((value) => value + 1);
+    addToast(
+      nextValue ? 'In-app protocol notifications enabled' : 'In-app protocol notifications disabled',
+      'success',
+      2000,
+    );
   };
 
-  const handleGasChange = (level: GasLevel) => {
-    setGasLevel(level);
-    const gwei = level === 'standard' ? '24 Gwei' : level === 'fast' ? '38 Gwei' : '65 Gwei';
-    addToast(`Gas priority switched. Targeting: ${gwei}`, 'info', 2000);
+  const handleClearDismissedNotifications = () => {
+    clearDismissedNotifications(dismissedNotificationsKey);
+    addToast('Dismissed notifications reset for this wallet', 'success', 2000);
   };
 
-  const handleToggleNotif = (key: keyof typeof notifs) => {
-    setNotifs((prev) => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
-    addToast('Notification parameters updated', 'success', 1500);
+  const handleCopyAddress = () => {
+    if (!wallet.address) return;
+    navigator.clipboard.writeText(wallet.address);
+    addToast('Wallet address copied', 'success', 1500);
   };
 
   return (
     <div className="flex flex-col gap-8 text-left select-none">
-      {/* Page Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 dark:border-slate-800/80 pb-6">
         <div>
           <div className="flex gap-2 text-xs text-slate-400 dark:text-slate-500 font-semibold mb-2 uppercase tracking-widest">
             <span>Home</span>
             <span>/</span>
-            <span className="text-blue-500">Settings & Profiles</span>
+            <span className="text-blue-500">Settings</span>
           </div>
           <h1 className="text-2xl md:text-3.5xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
             <SettingsIcon className="w-7 h-7 text-blue-500" />
             Control Center
           </h1>
           <p className="text-xs md:text-sm text-slate-500 dark:text-slate-405 leading-relaxed mt-1">
-            Configure profile credentials, active communication alert pathways, and Web3 gas priorities.
+            Manage wallet-scoped preferences, notification visibility, and live RPC fee data.
           </p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-        
-        {/* Left Side: Profile & Notifications */}
         <div className="lg:col-span-8 flex flex-col gap-6">
-          
-          {/* Section: Profile info */}
           <Card className="border-slate-100/70 p-6">
             <CardHeader className="border-none pb-0">
               <CardTitle icon={<User className="w-5 h-5 text-blue-500" />}>
-                Alex Profile Credentials
+                Wallet Identity
               </CardTitle>
             </CardHeader>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
-              Verify name tags and email contact systems used by notification triggers.
+              Aegis does not maintain an off-chain profile here. Identity is derived from the connected wallet.
             </p>
 
-            <form onSubmit={handleProfileSave} className="mt-6 flex flex-col gap-4">
-              <div className="flex flex-col sm:flex-row gap-5 items-center pb-4 border-b border-slate-100 dark:border-slate-800/50">
-                <img
-                  src={profile.avatar}
-                  className="w-16 h-16 rounded-2xl object-cover ring-2 ring-slate-100 dark:ring-slate-850 shrink-0"
-                  alt="Profile Avatar"
-                />
-                <div className="flex flex-col gap-1 text-center sm:text-left">
-                  <span className="text-sm font-extrabold text-slate-900 dark:text-white">{profile.name}</span>
-                  <span className="text-2xs text-slate-400 font-medium">Public address: <code className="bg-slate-50 dark:bg-slate-800/60 px-1.5 py-0.5 rounded font-mono font-bold text-slate-655">{sliceAddress(profile.address)}</code></span>
+            <div className="mt-6 flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row gap-5 items-start sm:items-center pb-4 border-b border-slate-100 dark:border-slate-800/50">
+                <div className="w-16 h-16 rounded-2xl bg-slate-900 dark:bg-slate-950 border border-slate-800 flex items-center justify-center text-blue-400 shrink-0">
+                  <Wallet className="w-7 h-7" />
+                </div>
+                <div className="flex flex-col gap-1 min-w-0">
+                  <span className="text-sm font-extrabold text-slate-900 dark:text-white">
+                    {wallet.connected ? wallet.provider ?? 'Injected Wallet' : 'Wallet Disconnected'}
+                  </span>
+                  <span className="text-2xs text-slate-400 font-medium">
+                    Public address:{' '}
+                    <code className="bg-slate-50 dark:bg-slate-800/60 px-1.5 py-0.5 rounded font-mono font-bold text-slate-655">
+                      {wallet.address ? sliceAddress(wallet.address) : 'Not connected'}
+                    </code>
+                  </span>
+                  <span className="text-2xs text-slate-400 font-medium">
+                    Active network:{' '}
+                    <strong className="text-slate-650 dark:text-slate-300">{wallet.network}</strong>
+                  </span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input
-                  label="Display Name"
-                  placeholder="e.g. Alex Web3"
-                  value={profile.name}
-                  onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                  className="py-2.5 text-xs rounded-xl"
-                />
-                <Input
-                  label="Notification Email Address"
-                  type="email"
-                  placeholder="alex@aegis.io"
-                  value={profile.email}
-                  onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                  className="py-2.5 text-xs rounded-xl"
-                  icon={<Mail className="w-4 h-4 text-slate-400" />}
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 mt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Button
-                  type="submit"
-                  variant="primary"
+                  type="button"
+                  variant="secondary"
                   size="sm"
-                  className="text-xs font-bold shadow-md shadow-blue-500/10"
+                  onClick={handleCopyAddress}
+                  disabled={!wallet.address}
+                  icon={<Copy className="w-4 h-4" />}
+                  className="text-xs font-bold"
                 >
-                  Save Profile Changes
+                  Copy Wallet Address
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onNavigate('security')}
+                  icon={<ShieldCheck className="w-4 h-4" />}
+                  className="text-xs font-bold"
+                >
+                  Open Security Keys
                 </Button>
               </div>
-            </form>
+
+              {!wallet.connected && (
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={() => connectWallet('MetaMask')}
+                  icon={<Wallet className="w-4 h-4" />}
+                  className="text-xs font-bold self-start"
+                >
+                  Connect Wallet
+                </Button>
+              )}
+            </div>
           </Card>
 
-          {/* Section: Alerts Channels */}
           <Card className="border-slate-100/70 p-6">
             <CardHeader className="border-none pb-0">
               <CardTitle icon={<Bell className="w-5 h-5 text-blue-500" />}>
-                Active Alarm Channels
+                Notification Center
               </CardTitle>
             </CardHeader>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
-              Decentralized contracts broadcast telemetry pings. Select which client channels should prompt warnings prior to vault lockups.
+              These settings affect the local app notification drawer for the connected wallet.
             </p>
 
             <div className="mt-6 flex flex-col gap-3.5">
-              
-              <div className="p-3.5 bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-medium">
+              <div className="p-3.5 bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-4 text-xs font-medium">
                 <div className="flex gap-3">
-                  <Mail className="w-4.5 h-4.5 text-blue-500 shrink-0" />
+                  <Globe className="w-4.5 h-4.5 text-blue-500 shrink-0" />
                   <div className="flex flex-col gap-0.5">
-                    <span className="font-bold text-slate-900 dark:text-white">Email Notification Prompts</span>
-                    <span className="text-3xs text-slate-450">Receives warning bulletins 10 days, 3 days, and 24 hours prior to expiration.</span>
+                    <span className="font-bold text-slate-900 dark:text-white">In-App Protocol Notifications</span>
+                    <span className="text-3xs text-slate-450">
+                      Shows wallet-scoped vault, claim, and activity alerts in the header.
+                    </span>
                   </div>
                 </div>
                 <input
                   type="checkbox"
-                  checked={notifs.emailWarnings}
-                  onChange={() => handleToggleNotif('emailWarnings')}
-                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
+                  checked={inAppNotificationsEnabled}
+                  onChange={handleToggleInAppNotifications}
+                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer shrink-0"
                 />
               </div>
 
-              <div className="p-3.5 bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-medium">
-                <div className="flex gap-3">
-                  <Smartphone className="w-4.5 h-4.5 text-emerald-500 shrink-0" />
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-bold text-slate-900 dark:text-white">Telegram Alerts Bot</span>
-                    <span className="text-3xs text-slate-455">Subscribes webhooks to send ping updates directly to secure personal messengers.</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3.5 bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800/80 text-xs">
+                  <span className="text-3xs text-slate-450 uppercase tracking-widest font-bold">Current Queue</span>
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      {notificationsLoading ? 'Reading...' : `${unreadCount} visible`}
+                    </span>
+                    <span className="text-rose-500 font-bold">{urgentCount} urgent</span>
                   </div>
                 </div>
-                <input
-                  type="checkbox"
-                  checked={notifs.telegramPings}
-                  onChange={() => handleToggleNotif('telegramPings')}
-                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
-                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleClearDismissedNotifications}
+                  className="text-xs font-bold min-h-[4.25rem]"
+                >
+                  Reset Cleared Notifications
+                </Button>
               </div>
 
-              <div className="p-3.5 bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-medium">
-                <div className="flex gap-3">
-                  <Globe className="w-4.5 h-4.5 text-purple-500 shrink-0" />
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-bold text-slate-900 dark:text-white">Push Browser Alerts</span>
-                    <span className="text-3xs text-slate-450">Triggers inline reminders when active tabs are opened inside client environments.</span>
-                  </div>
+              <div className="p-3.5 bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800/80 flex items-start gap-3 text-xs font-medium">
+                <Mail className="w-4.5 h-4.5 text-slate-400 shrink-0 mt-0.5" />
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-bold text-slate-900 dark:text-white">Email Channel</span>
+                  <span className="text-3xs text-slate-450">
+                    Not configured. This frontend has no backend mail relay, so no email address is stored here.
+                  </span>
                 </div>
-                <input
-                  type="checkbox"
-                  checked={notifs.browserPings}
-                  onChange={() => handleToggleNotif('browserPings')}
-                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
-                />
               </div>
 
+              <div className="p-3.5 bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800/80 flex items-start gap-3 text-xs font-medium">
+                <Smartphone className="w-4.5 h-4.5 text-slate-400 shrink-0 mt-0.5" />
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-bold text-slate-900 dark:text-white">Telegram / SMS Channel</span>
+                  <span className="text-3xs text-slate-450">
+                    Not connected. External messaging requires a server-side integration before it can be enabled.
+                  </span>
+                </div>
+              </div>
             </div>
           </Card>
         </div>
 
-        {/* Right Side: Gas Priority Customizer */}
         <div className="lg:col-span-4 flex flex-col gap-6">
           <Card className="border-slate-100/70 p-6 flex flex-col justify-between h-full">
             <div>
               <CardHeader className="flex items-center justify-between border-none pb-0">
                 <CardTitle icon={<Gauge className="w-5 h-5 text-blue-500" />}>
-                  Gas Speed Limits
+                  Network Fees
                 </CardTitle>
-                <span title="Web3 Gas Cost Options">
+                <span title="Live RPC fee data">
                   <HelpCircle className="w-4 h-4 text-slate-400 shrink-0" />
                 </span>
               </CardHeader>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
-                Specify preferred gas constraints for transaction dispatch. Faster configurations avoid pending blocks during mainnet congestion.
+                Gas prices are read from the active RPC. The wallet still estimates and confirms final fees per transaction.
               </p>
 
               <div className="mt-6 flex flex-col gap-3 font-medium">
-                
-                <div
-                  onClick={() => handleGasChange('standard')}
-                  className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between text-xs ${
-                    gasLevel === 'standard'
-                      ? 'border-blue-500 bg-blue-50/20 dark:bg-blue-950/20'
-                      : 'border-slate-100 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-850/50'
-                  }`}
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-bold text-slate-900 dark:text-white">Standard Priority</span>
-                    <span className="text-3xs text-slate-450">Est. block time ~ 2 - 5 mins</span>
-                  </div>
-                  <div className="text-right flex flex-col items-end gap-1 font-mono">
-                    <span className="text-[10px] font-extrabold text-slate-600 dark:text-slate-300">24 Gwei</span>
-                    <span className="text-[9px] text-slate-450">~ $2.10</span>
-                  </div>
+                <div className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/40 text-xs">
+                  <span className="text-3xs text-slate-450 uppercase tracking-widest font-bold">RPC Network</span>
+                  <strong className="text-slate-900 dark:text-white font-bold block mt-1">{wallet.network}</strong>
                 </div>
 
-                <div
-                  onClick={() => handleGasChange('fast')}
-                  className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between text-xs ${
-                    gasLevel === 'fast'
-                      ? 'border-blue-500 bg-blue-50/20 dark:bg-blue-950/20'
-                      : 'border-slate-100 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-850/50'
-                  }`}
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                      Fast Priority
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wider bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-450 border border-emerald-100 dark:border-emerald-900/30">
-                        Recommended
-                      </span>
-                    </span>
-                    <span className="text-3xs text-slate-450">Est. block time ~ 15 - 30 secs</span>
-                  </div>
-                  <div className="text-right flex flex-col items-end gap-1 font-mono">
-                    <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400">38 Gwei</span>
-                    <span className="text-[9px] text-slate-450">~ $3.40</span>
-                  </div>
+                <div className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/40 text-xs">
+                  <span className="text-3xs text-slate-450 uppercase tracking-widest font-bold">Latest Block</span>
+                  <strong className="text-slate-900 dark:text-white font-bold block mt-1">
+                    {networkSnapshot ? networkSnapshot.blockNumber.toString() : 'Unavailable'}
+                  </strong>
                 </div>
 
-                <div
-                  onClick={() => handleGasChange('instant')}
-                  className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between text-xs ${
-                    gasLevel === 'instant'
-                      ? 'border-blue-500 bg-blue-50/20 dark:bg-blue-950/20'
-                      : 'border-slate-100 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-850/50'
-                  }`}
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-bold text-slate-900 dark:text-white">Instant Priority</span>
-                    <span className="text-3xs text-slate-450">Est. block time ~ Under 12 secs</span>
-                  </div>
-                  <div className="text-right flex flex-col items-end gap-1 font-mono">
-                    <span className="text-[10px] font-extrabold text-purple-650 dark:text-purple-400">65 Gwei</span>
-                    <span className="text-[9px] text-slate-450">~ $5.80</span>
-                  </div>
+                <div className="p-3.5 rounded-xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/20 dark:bg-blue-950/10 text-xs">
+                  <span className="text-3xs text-slate-450 uppercase tracking-widest font-bold">Current Gas Price</span>
+                  <strong className="text-blue-600 dark:text-blue-400 font-extrabold block mt-1">
+                    {networkSnapshot ? formatGwei(networkSnapshot.gasPriceWei) : 'Unavailable'}
+                  </strong>
+                  <span className="text-[10px] text-slate-450 block mt-1">
+                    {networkSnapshot ? `Checked ${new Date(networkSnapshot.checkedAt).toLocaleTimeString()}` : 'Waiting for RPC data'}
+                  </span>
                 </div>
 
+                {networkError && (
+                  <div className="p-3 rounded-xl border border-rose-100 dark:border-rose-900/40 bg-rose-50/50 dark:bg-rose-950/15 text-xs text-rose-700 dark:text-rose-350 leading-relaxed">
+                    {networkError}
+                  </div>
+                )}
               </div>
             </div>
-            
-            <div className="p-3 bg-blue-50/30 dark:bg-slate-900/60 rounded-2xl border border-blue-100/50 dark:border-slate-850 text-3xs text-slate-450 leading-relaxed font-mono flex items-center gap-2 mt-4">
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-              On-chain gas feeds refreshed automatically.
+
+            <div className="flex flex-col gap-3 mt-5">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={refreshNetworkSnapshot}
+                loading={isRefreshingNetwork}
+                icon={<RefreshCw className="w-4 h-4" />}
+                className="text-xs font-bold"
+              >
+                Refresh RPC Snapshot
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => onNavigate('activity')}
+                icon={<Activity className="w-4 h-4" />}
+                className="text-xs font-bold"
+              >
+                Open My Activity Ledger
+              </Button>
+              <div className="p-3 bg-blue-50/30 dark:bg-slate-900/60 rounded-2xl border border-blue-100/50 dark:border-slate-850 text-3xs text-slate-450 leading-relaxed font-mono flex items-center gap-2">
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                Gas priority is controlled by the connected wallet at signing time.
+              </div>
             </div>
           </Card>
         </div>
-
       </div>
     </div>
   );

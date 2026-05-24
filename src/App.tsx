@@ -34,6 +34,13 @@ function AppContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Return to the public landing page whenever the wallet disconnects.
+  useEffect(() => {
+    if (!wallet.connected && currentPage !== 'landing') {
+      setCurrentPage('landing');
+    }
+  }, [wallet.connected, currentPage]);
+
   // Switch network toast triggers
   useEffect(() => {
     if (wallet.connected) {

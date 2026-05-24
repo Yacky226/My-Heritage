@@ -1,10 +1,11 @@
 import { useState, useRef } from 'react';
 import type { DragEvent, ChangeEvent } from 'react';
+import type { VaultFile } from '../../types';
 import { UploadCloud, File, Trash2, ShieldCheck } from 'lucide-react';
 
 interface UploadZoneProps {
-  onFilesSelected: (files: Array<{ name: string; size: string; type: string }>) => void;
-  selectedFiles: Array<{ name: string; size: string; type: string }>;
+  onFilesSelected: (files: VaultFile[]) => void;
+  selectedFiles: VaultFile[];
 }
 
 export function UploadZone({ onFilesSelected, selectedFiles }: UploadZoneProps) {
@@ -24,7 +25,7 @@ export function UploadZone({ onFilesSelected, selectedFiles }: UploadZoneProps) 
   const processFiles = (filesList: FileList | null) => {
     if (!filesList) return;
     
-    const newFilesArray: Array<{ name: string; size: string; type: string }> = [];
+    const newFilesArray: VaultFile[] = [];
     for (let i = 0; i < filesList.length; i++) {
       const f = filesList[i];
       const isMB = f.size > 1024 * 1024;
@@ -36,6 +37,8 @@ export function UploadZone({ onFilesSelected, selectedFiles }: UploadZoneProps) 
         name: f.name,
         size: sizeStr,
         type: f.type || 'application/octet-stream',
+        bytes: f.size,
+        source: f,
       });
     }
 
@@ -107,7 +110,7 @@ export function UploadZone({ onFilesSelected, selectedFiles }: UploadZoneProps) 
 
         <span className="text-2xs font-bold text-blue-500 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900/35 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
           <ShieldCheck className="w-3.5 h-3.5" />
-          AES-255-GCM Client Sandbox
+          IPFS Payload Ready
         </span>
       </div>
 

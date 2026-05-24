@@ -1,20 +1,28 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useChainId, usePublicClient } from 'wagmi';
 import { Card, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
 import { useToast } from '../hooks/useToast';
+import { useWallet } from '../hooks/useWallet';
+import { generateHeirEncryptionKeyPair } from '../services/crypto';
+import {
+  getAegisVaultAddress,
+  getAegisVaultAddressEnvName,
+} from '../contracts/address';
+import { sliceAddress } from '../utils/format';
 import {
   ShieldCheck,
-  Eye,
-  EyeOff,
   Copy,
   Cpu,
   Monitor,
   CheckCircle,
-  FileText,
   FileCode,
   AlertTriangle,
-  Lock
+  Download,
+  KeyRound,
+  RefreshCw,
+  Wallet,
+  Server,
 } from 'lucide-react';
 
 interface SecurityProps {
@@ -23,34 +31,84 @@ interface SecurityProps {
 
 export function Security({ onNavigate: _onNavigate }: SecurityProps) {
   const { addToast } = useToast();
-  const [revealSeed, setRevealSeed] = useState(false);
-  const [passphraseConfirm, setPassphraseConfirm] = useState('');
-  const [confirmed, setConfirmed] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
+  const { wallet } = useWallet();
+  const publicClient = usePublicClient();
+  const chainId = useChainId();
+  const aegisVaultAddress = getAegisVaultAddress(chainId);
+  const aegisVaultAddressEnvName = getAegisVaultAddressEnvName(chainId);
+  const [publicKeyJson, setPublicKeyJson] = useState('');
+  const [privateKeyJson, setPrivateKeyJson] = useState('');
+  const [isGeneratingKeys, setIsGeneratingKeys] = useState(false);
+  const [contractCodeBytes, setContractCodeBytes] = useState<number | null>(null);
+  const [latestBlock, setLatestBlock] = useState<bigint | null>(null);
+  const [contractCheckError, setContractCheckError] = useState<string | null>(null);
 
-  const mockSeedPhrase = "desert utility pulse visual strategy manual grid mesh pattern audit trigger proof";
+  const contractStatus = !aegisVaultAddress
+    ? 'Not Configured'
+    : contractCodeBytes === null
+      ? 'Checking'
+      : contractCodeBytes > 0
+        ? 'Deployed'
+        : 'Missing';
 
-  const smartContracts = [
-    { name: 'AegisRegistryFactory', address: '0x8f2d...b14c', status: 'Audited', auditor: 'CertiK', auditDate: '2026-03-12' },
-    { name: 'AegisHeartbeatMonitor', address: '0x1c3a...9e5d', status: 'Audited', auditor: 'Hacken', auditDate: '2026-04-01' },
-    { name: 'AegisEncryptedStore', address: '0x5d9e...3a8f', status: 'Audited', auditor: 'CertiK', auditDate: '2026-03-15' }
-  ];
+  useEffect(() => {
+    let mounted = true;
 
-  const deviceSessions = [
-    { device: 'Brave Browser (Windows 11)', ip: '192.168.1.143', location: 'Paris, France', status: 'Current Session' },
-    { device: 'MetaMask Mobile App (iOS)', ip: '10.0.8.23', location: 'Paris, France', status: 'Authorized' }
-  ];
+    const checkContract = async () => {
+      if (!publicClient) return;
 
-  const handleRevealClick = () => {
-    if (!confirmed) {
-      if (passphraseConfirm.toLowerCase() !== 'reveal') {
-        setErrorMsg('Please type "REVEAL" to confirm you understand the security implications.');
-        return;
+      try {
+        setContractCheckError(null);
+
+        if (!aegisVaultAddress) {
+          const blockNumber = await publicClient.getBlockNumber();
+
+          if (!mounted) return;
+
+          setContractCodeBytes(0);
+          setLatestBlock(blockNumber);
+          setContractCheckError(`No AegisVault address configured for ${wallet.network}. Set ${aegisVaultAddressEnvName}.`);
+          return;
+        }
+
+        const [bytecode, blockNumber] = await Promise.all([
+          publicClient.getBytecode({ address: aegisVaultAddress }),
+          publicClient.getBlockNumber(),
+        ]);
+
+        if (!mounted) return;
+
+        setContractCodeBytes(bytecode ? Math.max((bytecode.length - 2) / 2, 0) : 0);
+        setLatestBlock(blockNumber);
+      } catch (error) {
+        if (!mounted) return;
+        console.error(error);
+        setContractCodeBytes(0);
+        setContractCheckError(error instanceof Error ? error.message : 'Unable to read contract bytecode');
       }
-      setErrorMsg('');
-      setConfirmed(true);
+    };
+
+    checkContract();
+
+    return () => {
+      mounted = false;
+    };
+  }, [aegisVaultAddress, aegisVaultAddressEnvName, publicClient, wallet.network]);
+
+  const handleGenerateKeys = async () => {
+    try {
+      setIsGeneratingKeys(true);
+      const keyPair = await generateHeirEncryptionKeyPair();
+
+      setPublicKeyJson(JSON.stringify(keyPair.publicKey, null, 2));
+      setPrivateKeyJson(JSON.stringify(keyPair.privateKey, null, 2));
+      addToast('Heir encryption key pair generated locally', 'success', 2500);
+    } catch (error) {
+      console.error(error);
+      addToast('Unable to generate encryption key pair', 'error', 3000);
+    } finally {
+      setIsGeneratingKeys(false);
     }
-    setRevealSeed(!revealSeed);
   };
 
   const handleCopy = (text: string, message: string) => {
@@ -58,9 +116,23 @@ export function Security({ onNavigate: _onNavigate }: SecurityProps) {
     addToast(message, 'success', 2000);
   };
 
+  const handleDownloadPrivateKey = () => {
+    if (!privateKeyJson) return;
+
+    const blob = new Blob([privateKeyJson], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = `aegis-heir-private-key-${Date.now()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="flex flex-col gap-8 text-left select-none">
-      {/* Page Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 dark:border-slate-800/80 pb-6">
         <div>
           <div className="flex gap-2 text-xs text-slate-400 dark:text-slate-500 font-semibold mb-2 uppercase tracking-widest">
@@ -73,143 +145,178 @@ export function Security({ onNavigate: _onNavigate }: SecurityProps) {
             Security & Contracts
           </h1>
           <p className="text-xs md:text-sm text-slate-500 dark:text-slate-405 leading-relaxed mt-1">
-            Examine decentralized smart contract specifications, security audit validations, and local-first cryptographic parameters.
+            Inspect the live protocol contract, current wallet session, and local-first encryption parameters.
           </p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-        
-        {/* Left Side: Master Key Management */}
         <div className="lg:col-span-7 flex flex-col gap-6">
-          
           <Card className="border-slate-100/70 p-6 flex flex-col justify-between h-full">
             <div>
               <CardHeader className="flex justify-between items-start border-none pb-0">
-                <CardTitle icon={<Lock className="w-5 h-5 text-blue-500" />}>
-                  Master Recovery Key Seed
+                <CardTitle icon={<KeyRound className="w-5 h-5 text-blue-500" />}>
+                  Heir Encryption Key Pair
                 </CardTitle>
-                <span className="bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-450 border border-rose-100 dark:border-rose-900/35 text-[10px] tracking-widest uppercase font-mono px-2.5 py-0.5 rounded-full shrink-0 font-bold inline-flex items-center">High Risk</span>
+                <span className="bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-450 border border-blue-100 dark:border-blue-900/35 text-[10px] tracking-widest uppercase font-mono px-2.5 py-0.5 rounded-full shrink-0 font-bold inline-flex items-center">Local Only</span>
               </CardHeader>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
-                This seed is generated locally to derive your client-side encryption and fragment recombination keys. 
-                <strong> Aegis Protocol never stores this on any centralized server.</strong> If lost, your digital legacy cannot be recovered.
+                Generate an ECDH P-256 key pair in this browser. Share only the public key with the testator; keep the private key offline for future recovery.
               </p>
 
-              {/* Warning box */}
               <div className="mt-4 p-4 rounded-xl border border-rose-100/60 dark:border-rose-950 bg-rose-50/30 dark:bg-rose-950/10 flex gap-3 items-start">
                 <AlertTriangle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
                 <div className="text-xs text-rose-800 dark:text-rose-400 leading-relaxed">
-                  <strong className="font-bold">Crucial Precaution:</strong> Never share this recovery seed with anyone. 
-                  Malicious parties with access to this seed can claim and decrypt your legacy vaults instantly.
+                  <strong className="font-bold">Private key rule:</strong> never send the private key to anyone. If it is lost, the encrypted IPFS payload cannot be decrypted.
                 </div>
               </div>
 
-              {/* Passphrase Reveal Panel */}
-              <div className="mt-6 p-4.5 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40">
-                {revealSeed ? (
-                  <div className="flex flex-col gap-4">
-                    <div className="p-4 bg-white dark:bg-slate-950 border border-blue-100 dark:border-blue-900/40 rounded-xl font-mono text-center text-slate-800 dark:text-slate-200 select-text break-words leading-loose font-bold tracking-wide shadow-inner text-xs sm:text-sm">
-                      {mockSeedPhrase}
-                    </div>
-                    <div className="flex gap-3 justify-end">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleCopy(mockSeedPhrase, 'Master recovery seed copied!')}
-                        icon={<Copy className="w-3.5 h-3.5" />}
-                        className="text-xs font-bold text-slate-500 hover:text-slate-900"
-                      >
-                        Copy Phrase
-                      </Button>
+              <div className="mt-6 flex flex-col gap-4">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleGenerateKeys}
+                  loading={isGeneratingKeys}
+                  className="w-full text-xs font-bold shadow-md shadow-blue-500/5"
+                  icon={<RefreshCw className="w-4 h-4" />}
+                >
+                  Generate Local Key Pair
+                </Button>
+
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-350 mb-2">
+                      Public Key to Share
+                    </label>
+                    <textarea
+                      readOnly
+                      value={publicKeyJson}
+                      placeholder="Generate a key pair to export the heir public key."
+                      className="w-full h-32 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-450 dark:placeholder-slate-550 text-xs font-mono p-3 resize-y focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleCopy(publicKeyJson, 'Public encryption key copied!')}
+                      disabled={!publicKeyJson}
+                      icon={<Copy className="w-3.5 h-3.5" />}
+                      className="mt-2 text-xs font-bold text-slate-500 hover:text-slate-900"
+                    >
+                      Copy Public Key
+                    </Button>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-350 mb-2">
+                      Private Key to Store Offline
+                    </label>
+                    <textarea
+                      readOnly
+                      value={privateKeyJson}
+                      placeholder="The private key appears here once generated. Download it and store it safely."
+                      className="w-full h-32 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-450 dark:placeholder-slate-550 text-xs font-mono p-3 resize-y focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    />
+                    <div className="flex flex-col sm:flex-row gap-2 mt-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setRevealSeed(false)}
-                        icon={<EyeOff className="w-3.5 h-3.5" />}
+                        onClick={() => handleCopy(privateKeyJson, 'Private encryption key copied locally!')}
+                        disabled={!privateKeyJson}
+                        icon={<Copy className="w-3.5 h-3.5" />}
                         className="text-xs font-bold"
                       >
-                        Hide Key Seed
+                        Copy Private Key
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={handleDownloadPrivateKey}
+                        disabled={!privateKeyJson}
+                        icon={<Download className="w-3.5 h-3.5" />}
+                        className="text-xs font-bold"
+                      >
+                        Download Private Key
                       </Button>
                     </div>
                   </div>
-                ) : (
-                  <div className="flex flex-col gap-4">
-                    {!confirmed && (
-                      <Input
-                        label="Security Validation"
-                        placeholder="Type 'REVEAL' to unlock export options"
-                        value={passphraseConfirm}
-                        onChange={(e) => setPassphraseConfirm(e.target.value)}
-                        error={errorMsg}
-                        className="text-xs py-2"
-                        helperText="Type the confirmation word precisely to enable the reveal switch."
-                      />
-                    )}
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={handleRevealClick}
-                      className="w-full text-xs font-bold shadow-md shadow-rose-500/5 mt-1.5"
-                      icon={<Eye className="w-4 h-4" />}
-                    >
-                      Unlock & Reveal Recovery Seed
-                    </Button>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        <div className="lg:col-span-5 flex flex-col gap-6">
+          <Card className="border-slate-100/70 p-6 flex flex-col justify-between h-full">
+            <div>
+              <CardHeader className="flex items-center justify-between border-none pb-0">
+                <CardTitle icon={<FileCode className="w-5 h-5 text-blue-500" />}>
+                  Aegis Contract Status
+                </CardTitle>
+                <div className={`flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-widest font-mono ${
+                  contractStatus === 'Deployed'
+                    ? 'text-emerald-500 dark:text-emerald-400'
+                    : contractStatus === 'Missing' || contractStatus === 'Not Configured'
+                      ? 'text-rose-500 dark:text-rose-400'
+                      : 'text-blue-500 dark:text-blue-400'
+                }`}>
+                  <CheckCircle className="w-3 h-3 animate-[pulse_1.5s_infinite]" />
+                  {contractStatus}
+                </div>
+              </CardHeader>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
+                This card reads the configured AegisVault address from the active RPC and checks whether contract bytecode exists there.
+              </p>
+
+              <div className="mt-5 flex flex-col gap-3.5">
+                <div className="p-3 bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800/80 flex flex-col gap-2 text-xs">
+                  <span className="text-2xs text-slate-400 uppercase tracking-wider block font-mono">Contract</span>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-bold text-slate-900 dark:text-white">AegisVault</span>
+                    <code className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-350 font-mono">
+                      {aegisVaultAddress ? sliceAddress(aegisVaultAddress) : 'Not configured'}
+                    </code>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800/80 grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-2xs text-slate-400 uppercase tracking-wider block font-mono">Network</span>
+                    <strong className="text-slate-900 dark:text-white font-bold block mt-1">{wallet.network}</strong>
+                  </div>
+                  <div>
+                    <span className="text-2xs text-slate-400 uppercase tracking-wider block font-mono">Latest Block</span>
+                    <strong className="text-slate-900 dark:text-white font-bold block mt-1">
+                      {latestBlock === null ? 'Pending' : latestBlock.toString()}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-2xs text-slate-400 uppercase tracking-wider block font-mono">Bytecode</span>
+                    <strong className="text-slate-900 dark:text-white font-bold block mt-1">
+                      {!aegisVaultAddress
+                        ? 'Unavailable'
+                        : contractCodeBytes === null
+                          ? 'Checking'
+                          : `${Math.round(contractCodeBytes / 1024)} KB`}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-2xs text-slate-400 uppercase tracking-wider block font-mono">Source</span>
+                    <strong className="text-slate-900 dark:text-white font-bold block mt-1">Local ABI</strong>
+                  </div>
+                </div>
+
+                {contractCheckError && (
+                  <div className="p-3 rounded-xl border border-rose-100 dark:border-rose-900/40 bg-rose-50/50 dark:bg-rose-950/15 text-xs text-rose-700 dark:text-rose-350 leading-relaxed">
+                    {contractCheckError}
                   </div>
                 )}
               </div>
             </div>
           </Card>
         </div>
-
-        {/* Right Side: Security Audited Contracts */}
-        <div className="lg:col-span-5 flex flex-col gap-6">
-          <Card className="border-slate-100/70 p-6 flex flex-col justify-between h-full">
-            <div>
-              <CardHeader className="flex items-center justify-between border-none pb-0">
-                <CardTitle icon={<FileCode className="w-5 h-5 text-blue-500" />}>
-                  Verified Smart Contracts
-                </CardTitle>
-                <div className="flex items-center gap-1 text-[10px] text-emerald-500 dark:text-emerald-400 font-extrabold uppercase tracking-widest font-mono">
-                  <CheckCircle className="w-3 h-3 text-emerald-500 animate-[pulse_1.5s_infinite]" />
-                  Verified
-                </div>
-              </CardHeader>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
-                Smart contracts deployed on Ethereum Mainnet are open-source and audited by premium cryptography firms to guarantee asset preservation and mathematical immutability.
-              </p>
-
-              <div className="mt-5 flex flex-col gap-3.5">
-                {smartContracts.map((contract, index) => (
-                  <div key={index} className="p-3 bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                        <FileText className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                        {contract.name}
-                      </span>
-                      <span className="text-3xs font-mono text-slate-450 uppercase tracking-widest mt-1 block">
-                        Address: <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded text-slate-700 dark:text-slate-350">{contract.address}</code>
-                      </span>
-                    </div>
-                    <div className="text-right flex flex-col items-end gap-1 font-mono">
-                      <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-100/50 dark:border-emerald-900/40">
-                        {contract.status}
-                      </span>
-                      <span className="text-[9px] text-slate-400">By {contract.auditor}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Card>
-        </div>
-
       </div>
 
-      {/* Cryptographic Standards & Session Activity */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full items-stretch">
-        
-        {/* Section: Crypto Standards */}
         <Card className="border-slate-100/70 p-6">
           <CardHeader className="border-none pb-0">
             <CardTitle icon={<Cpu className="w-5 h-5 text-blue-500" />}>
@@ -222,9 +329,9 @@ export function Security({ onNavigate: _onNavigate }: SecurityProps) {
 
           <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs font-medium">
             <div className="p-3 bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800/80">
-              <span className="text-2xs text-slate-400 uppercase tracking-wider block font-mono">Key Derivation</span>
-              <strong className="text-slate-900 dark:text-white font-bold block mt-1">PBKDF2 (SHA-256)</strong>
-              <span className="text-3xs text-slate-450 font-mono mt-0.5 block">100,000 Stretching Loops</span>
+              <span className="text-2xs text-slate-400 uppercase tracking-wider block font-mono">Key Agreement</span>
+              <strong className="text-slate-900 dark:text-white font-bold block mt-1">ECDH P-256 + HKDF</strong>
+              <span className="text-3xs text-slate-450 font-mono mt-0.5 block">Per-vault ephemeral wrapping key</span>
             </div>
             <div className="p-3 bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800/80">
               <span className="text-2xs text-slate-400 uppercase tracking-wider block font-mono">Symmetric Cipher</span>
@@ -233,8 +340,8 @@ export function Security({ onNavigate: _onNavigate }: SecurityProps) {
             </div>
             <div className="p-3 bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800/80">
               <span className="text-2xs text-slate-400 uppercase tracking-wider block font-mono">Payload Distribution</span>
-              <strong className="text-slate-900 dark:text-white font-bold block mt-1">IPFS Sharding Network</strong>
-              <span className="text-3xs text-slate-450 font-mono mt-0.5 block">Encrypted Package Fragments</span>
+              <strong className="text-slate-900 dark:text-white font-bold block mt-1">IPFS / Pinata CID</strong>
+              <span className="text-3xs text-slate-450 font-mono mt-0.5 block">Encrypted JSON payload</span>
             </div>
             <div className="p-3 bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800/80">
               <span className="text-2xs text-slate-400 uppercase tracking-wider block font-mono">Timer Enforcement</span>
@@ -244,41 +351,56 @@ export function Security({ onNavigate: _onNavigate }: SecurityProps) {
           </div>
         </Card>
 
-        {/* Section: Session Activity */}
         <Card className="border-slate-100/70 p-6">
           <CardHeader className="border-none pb-0">
             <CardTitle icon={<Monitor className="w-5 h-5 text-blue-500" />}>
-              Active Device Sessions
+              Current Wallet Session
             </CardTitle>
           </CardHeader>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
-            These devices have signed messages and are authorized to access local indices.
+            Session details come from Wagmi and the currently connected injected wallet.
           </p>
 
           <div className="mt-5 flex flex-col gap-3 font-medium">
-            {deviceSessions.map((session, index) => (
-              <div key={index} className="p-3.5 bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-slate-200/50 dark:bg-slate-850 flex items-center justify-center text-slate-600 dark:text-slate-400 shrink-0">
-                    <Monitor className="w-4.5 h-4.5" />
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-bold text-slate-900 dark:text-white">{session.device}</span>
-                    <span className="text-3xs text-slate-450 font-mono">IP: {session.ip} • Location: {session.location}</span>
-                  </div>
+            <div className="p-3.5 bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-slate-200/50 dark:bg-slate-850 flex items-center justify-center text-slate-600 dark:text-slate-400 shrink-0">
+                  <Wallet className="w-4.5 h-4.5" />
                 </div>
-                <span className={`inline-flex items-center px-2 py-0.5 text-[9px] font-bold uppercase rounded-lg tracking-wider border font-mono ${
-                  session.status === 'Current Session'
-                    ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 border-blue-100/60 dark:border-blue-900/40'
-                    : 'text-slate-650 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700/60'
-                }`}>
-                  {session.status}
-                </span>
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    {wallet.connected ? wallet.provider ?? 'Injected Wallet' : 'Wallet Disconnected'}
+                  </span>
+                  <span className="text-3xs text-slate-450 font-mono truncate">
+                    {wallet.address ? wallet.address : 'No account connected'}
+                  </span>
+                </div>
               </div>
-            ))}
+              <span className={`inline-flex items-center px-2 py-0.5 text-[9px] font-bold uppercase rounded-lg tracking-wider border font-mono shrink-0 ${
+                wallet.connected
+                  ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 border-blue-100/60 dark:border-blue-900/40'
+                  : 'text-slate-650 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700/60'
+              }`}>
+                {wallet.connected ? 'Connected' : 'Offline'}
+              </span>
+            </div>
+
+            <div className="p-3.5 bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-slate-200/50 dark:bg-slate-850 flex items-center justify-center text-slate-600 dark:text-slate-400 shrink-0">
+                  <Server className="w-4.5 h-4.5" />
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-bold text-slate-900 dark:text-white">RPC Network</span>
+                  <span className="text-3xs text-slate-450 font-mono">{wallet.network}</span>
+                </div>
+              </div>
+              <span className="inline-flex items-center px-2 py-0.5 text-[9px] font-bold uppercase rounded-lg tracking-wider border font-mono text-slate-650 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700/60">
+                Wagmi
+              </span>
+            </div>
           </div>
         </Card>
-
       </div>
     </div>
   );

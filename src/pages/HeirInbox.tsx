@@ -3,7 +3,8 @@ import { useClaims } from '../hooks/useClaims';
 import { HeirVaultCard } from '../components/heir/HeirVaultCard';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Card } from '../components/ui/Card';
-import { Shield, Sparkles, Inbox, Wallet } from 'lucide-react';
+import { Button } from '../components/ui/Button';
+import { Shield, Sparkles, Inbox, Wallet, RefreshCw } from 'lucide-react';
 import { sliceAddress } from '../utils/format';
 
 interface HeirInboxProps {
@@ -12,9 +13,10 @@ interface HeirInboxProps {
 
 export function HeirInbox({ onNavigate: _onNavigate }: HeirInboxProps) {
   const { wallet, connectWallet } = useWallet();
-  const { getInheritances } = useClaims();
+  const { getInheritances, isLoading, refetch } = useClaims();
 
   const inheritances = getInheritances();
+  const showInitialLoading = wallet.connected && isLoading && inheritances.length === 0;
 
   return (
     <div className="flex flex-col gap-8 text-left select-none">
@@ -34,6 +36,18 @@ export function HeirInbox({ onNavigate: _onNavigate }: HeirInboxProps) {
             Access secure digital packages designated to you. Submit claims when inactivity conditions are met.
           </p>
         </div>
+        {wallet.connected && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={refetch}
+            loading={isLoading}
+            icon={<RefreshCw className="w-4 h-4 shrink-0" />}
+            className="shadow-sm shrink-0"
+          >
+            Refresh
+          </Button>
+        )}
       </div>
 
       {/* Info Notice Panel */}
@@ -46,8 +60,8 @@ export function HeirInbox({ onNavigate: _onNavigate }: HeirInboxProps) {
             <h4 className="font-bold text-sm text-slate-950 dark:text-white">How Inheritance Claims Work</h4>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mt-1.5">
               Aegis Protocol monitors owner wallet activity. If an owner's inactivity timer expires, the vault locks.
-              As the designated heir, you can trigger a **Smart Contract Claim**. After a standard 15-second 
-              cooldown alert window, you can decrypt files locally using your offline recovery seed.
+              As the designated heir, you can trigger a smart contract claim directly from this inbox. The contract
+              verifies the timestamp on-chain before allowing access to the recovery flow.
             </p>
           </div>
         </Card>
@@ -59,8 +73,8 @@ export function HeirInbox({ onNavigate: _onNavigate }: HeirInboxProps) {
           <div>
             <h4 className="font-bold text-sm text-slate-950 dark:text-white">Local-First Privacy</h4>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mt-1.5">
-              Aegis never stores passwords or file keys. Decryption occurs strictly inside your browser sandbox
-              using cryptographically stretched key derivations from the master passphrase.
+              Aegis never stores passwords or private file keys. Decryption occurs strictly inside your browser
+              using the heir private encryption key after the on-chain claim succeeds.
             </p>
           </div>
         </Card>
@@ -77,22 +91,23 @@ export function HeirInbox({ onNavigate: _onNavigate }: HeirInboxProps) {
             icon={<Wallet className="w-12 h-12 text-slate-350 dark:text-slate-600 animate-pulse" />}
           />
         </div>
+      ) : showInitialLoading ? (
+        <div className="mt-4">
+          <EmptyState
+            title="Loading Heir Designations"
+            description={`Reading the AegisVault contract for inheritances assigned to ${sliceAddress(wallet.address || '')}.`}
+            icon={<RefreshCw className="w-12 h-12 text-slate-350 dark:text-slate-600 animate-spin" />}
+          />
+        </div>
       ) : inheritances.length === 0 ? (
         <div className="mt-4">
           <EmptyState
             title="Inbox Empty"
             description={`No inheritance packages found for the currently connected wallet (${sliceAddress(wallet.address || '')}).`}
-            actionText="Switch Mock Wallet"
+            actionText="Reconnect Wallet"
             onAction={() => connectWallet('MetaMask')}
             icon={<Inbox className="w-12 h-12 text-slate-350 dark:text-slate-600" />}
           />
-          <div className="max-w-md mx-auto mt-6 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 text-center">
-            <span className="text-2xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-2">Simulated Demo Note</span>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Connect <strong>MetaMask</strong> to claim "Crypto Keys & API Credentials", or 
-              connect <strong>WalletConnect</strong> to claim "Family Seed Phrases".
-            </p>
-          </div>
         </div>
       ) : (
         <div className="flex flex-col gap-6">

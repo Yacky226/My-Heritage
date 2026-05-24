@@ -32,14 +32,6 @@ export function formatBytes(bytes: number, decimals = 2): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
-export function generateTxHash(): string {
-  const chars = '0123456789abcdef';
-  let hash = '0x';
-  for (let i = 0; i < 64; i++) {
-    hash += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return hash;
-}
 
 export function formatRelativeTime(timestamp: number): string {
   const now = Date.now();

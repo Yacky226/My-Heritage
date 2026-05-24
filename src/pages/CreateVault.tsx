@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useChainId, usePublicClient } from 'wagmi';
+import { formatEther, getAddress, isAddress } from 'viem';
+import type { Abi } from 'viem';
 import { useVaults } from '../hooks/useVaults';
 import { useToast } from '../hooks/useToast';
 import { useWallet } from '../hooks/useWallet';
@@ -9,9 +12,16 @@ import { Input } from '../components/ui/Input';
 import { Card, CardHeader, CardTitle } from '../components/ui/Card';
 import { Alert } from '../components/ui/Alert';
 import { Tooltip } from '../components/ui/Tooltip';
-import { simulateEncryption } from '../utils/crypto';
+import { animateEncryptionProgress } from '../utils/crypto';
 import type { CryptographicResult } from '../utils/crypto';
+import { parseEncryptionPublicKey } from '../services/crypto';
+import type { VaultFile } from '../types';
 import { sliceAddress } from '../utils/format';
+import AegisVaultArtifact from '../contracts/AegisVault.json';
+import {
+  getAegisVaultAddress,
+  getAegisVaultAddressEnvName,
+} from '../contracts/address';
 import {
   User,
   ShieldCheck,
@@ -24,6 +34,9 @@ import {
   FileCheck
 } from 'lucide-react';
 
+const aegisVaultAbi = AegisVaultArtifact.abi as Abi;
+const ESTIMATE_IPFS_CID = 'bafybeigdyrzt5samplecidforgasestimateonlyaegisvaultpayload';
+
 interface CreateVaultProps {
   onNavigate: (pageId: string) => void;
 }
@@ -32,17 +45,22 @@ export function CreateVault({ onNavigate }: CreateVaultProps) {
   const { createVault } = useVaults();
   const { addToast } = useToast();
   const { wallet } = useWallet();
+  const publicClient = usePublicClient();
+  const chainId = useChainId();
+  const aegisVaultAddress = getAegisVaultAddress(chainId);
+  const aegisVaultAddressEnvName = getAegisVaultAddressEnvName(chainId);
 
   const [currentStep, setCurrentStep] = useState(1);
   
   // Step 1: Heir Info
   const [vaultName, setVaultName] = useState('');
   const [heirAddress, setHeirAddress] = useState('');
+  const [heirEncryptionPublicKey, setHeirEncryptionPublicKey] = useState('');
   const [description, setDescription] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Step 2: Upload Zone
-  const [files, setFiles] = useState<Array<{ name: string; size: string; type: string }>>([]);
+  const [files, setFiles] = useState<VaultFile[]>([]);
 
   // Step 3: Encryption
   const [encryptionProgress, setEncryptionProgress] = useState(0);
@@ -51,11 +69,16 @@ export function CreateVault({ onNavigate }: CreateVaultProps) {
 
   // Step 4: Timer Config
   const [inactivityDays, setInactivityDays] = useState(90);
+  const [useQuickUnlock, setUseQuickUnlock] = useState(false);
+  const [quickUnlockSeconds, setQuickUnlockSeconds] = useState(60);
   const [emailAlert, setEmailAlert] = useState(true);
   const [browserAlert, setBrowserAlert] = useState(true);
 
   // Step 5: Finalize
   const [isInitializing, setIsInitializing] = useState(false);
+  const [isEstimatingGas, setIsEstimatingGas] = useState(false);
+  const [gasEstimate, setGasEstimate] = useState('Connect wallet to estimate');
+  const [gasEstimateError, setGasEstimateError] = useState('');
 
   const wizardSteps = [
     { number: 1, label: 'Heir Details' },
@@ -64,12 +87,110 @@ export function CreateVault({ onNavigate }: CreateVaultProps) {
     { number: 4, label: 'Timer Config' },
     { number: 5, label: 'Review & Deploy' },
   ];
+  const isDevMode = import.meta.env.DEV;
+  const quickUnlockActive = isDevMode && useQuickUnlock;
+  const inactivityDelaySeconds = quickUnlockActive
+    ? Math.max(1, Math.floor(quickUnlockSeconds))
+    : inactivityDays * 24 * 60 * 60;
+  const inactivityDisplay = quickUnlockActive
+    ? `${inactivityDelaySeconds} Seconds`
+    : `${inactivityDays} Days`;
+  const gasEstimateDisplay = !publicClient || !wallet.connected || !wallet.address
+    ? 'Connect wallet to estimate'
+    : !aegisVaultAddress
+      ? 'Contract not configured'
+      : !isAddress(heirAddress)
+        ? 'Enter valid heir address'
+        : gasEstimate;
+  const visibleGasEstimateError =
+    publicClient && wallet.connected && wallet.address && isAddress(heirAddress)
+      ? !aegisVaultAddress
+        ? `Deploy AegisVault on ${wallet.network}, then set ${aegisVaultAddressEnvName}.`
+        : gasEstimateError
+      : '';
+
+  useEffect(() => {
+    if (currentStep !== 5) return;
+
+    if (!publicClient || !wallet.connected || !wallet.address) {
+      return;
+    }
+
+    if (!aegisVaultAddress) {
+      return;
+    }
+
+    if (!isAddress(heirAddress)) {
+      return;
+    }
+
+    let cancelled = false;
+    const accountAddress = wallet.address;
+
+    const estimateGas = async () => {
+      setIsEstimatingGas(true);
+      setGasEstimateError('');
+
+      try {
+        const gas = await publicClient.estimateContractGas({
+          address: aegisVaultAddress,
+          abi: aegisVaultAbi,
+          functionName: 'createVault',
+          args: [
+            getAddress(heirAddress),
+            ESTIMATE_IPFS_CID,
+            BigInt(inactivityDelaySeconds),
+          ],
+          account: getAddress(accountAddress),
+        });
+        const gasPrice = await publicClient.getGasPrice();
+        const estimatedFeeEth = formatEther(gas * gasPrice);
+        const estimatedFee = Number(estimatedFeeEth);
+
+        if (cancelled) return;
+
+        setGasEstimate(
+          `${gas.toLocaleString()} gas / ${
+            estimatedFee > 0 ? estimatedFee.toFixed(6) : estimatedFeeEth
+          } ETH`,
+        );
+      } catch (error) {
+        if (cancelled) return;
+
+        console.error(error);
+        setGasEstimate('Estimate unavailable');
+        setGasEstimateError(
+          error instanceof Error
+            ? error.message
+            : 'Unable to estimate gas for this transaction.',
+        );
+      } finally {
+        if (!cancelled) {
+          setIsEstimatingGas(false);
+        }
+      }
+    };
+
+    estimateGas();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentStep,
+    aegisVaultAddress,
+    heirAddress,
+    inactivityDelaySeconds,
+    publicClient,
+    wallet.address,
+    wallet.connected,
+  ]);
 
   // Perform Step 3 encryption simulation automatically upon entering step 3
   useEffect(() => {
     if (currentStep === 3) {
       setEncryptionProgress(0);
-      setEncryptionText('Initializing AES-256-GCM cipher engine...');
+      setEncryptionText('Preparing ECDH P-256 key agreement...');
       
       const runSim = async () => {
         const payloadName = files.length > 0 ? files[0].name : 'legacy_payload.zip';
@@ -80,7 +201,7 @@ export function CreateVault({ onNavigate }: CreateVaultProps) {
         }, 1024 * 1024);
 
         try {
-          const result = await simulateEncryption(payloadName, payloadSize, (pct, txt) => {
+          const result = await animateEncryptionProgress(payloadName, payloadSize, (pct, txt) => {
             setEncryptionProgress(pct);
             setEncryptionText(txt);
           });
@@ -105,6 +226,17 @@ export function CreateVault({ onNavigate }: CreateVaultProps) {
         nextErrors.heirAddress = 'Heir Address is required';
       } else if (!heirAddress.startsWith('0x') || heirAddress.length !== 42) {
         nextErrors.heirAddress = 'Invalid address. Must be a 42-character Ethereum address (0x...)';
+      }
+      if (!heirEncryptionPublicKey.trim()) {
+        nextErrors.heirEncryptionPublicKey = 'Heir encryption public key is required';
+      } else {
+        try {
+          parseEncryptionPublicKey(heirEncryptionPublicKey);
+        } catch (error) {
+          nextErrors.heirEncryptionPublicKey = error instanceof Error
+            ? error.message
+            : 'Invalid public encryption key JSON';
+        }
       }
 
       if (Object.keys(nextErrors).length > 0) {
@@ -141,18 +273,28 @@ export function CreateVault({ onNavigate }: CreateVaultProps) {
       return;
     }
 
+    let publicKey: JsonWebKey;
+
+    try {
+      publicKey = parseEncryptionPublicKey(heirEncryptionPublicKey);
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : 'Invalid heir encryption public key', 'error');
+      return;
+    }
+
     setIsInitializing(true);
     const success = await createVault(
       vaultName,
       heirAddress,
-      inactivityDays,
+      inactivityDelaySeconds,
       description,
-      files
+      files,
+      publicKey,
     );
 
     if (success) {
       setIsInitializing(false);
-      onNavigate('dashboard');
+      onNavigate('vaults');
     } else {
       setIsInitializing(false);
     }
@@ -187,7 +329,7 @@ export function CreateVault({ onNavigate }: CreateVaultProps) {
                 Step 1: Beneficiary Details
               </CardTitle>
               <p className="text-xs md:text-sm text-slate-500 dark:text-slate-405 leading-relaxed mt-1">
-                Enter your beneficiary wallet details. They will be registered on-chain as the sole entity authorized to request decryption keys if you are inactive.
+                Enter your beneficiary wallet and encryption public key. The wallet is registered on-chain, while the public key encrypts the payload locally before IPFS upload.
               </p>
             </CardHeader>
 
@@ -209,6 +351,31 @@ export function CreateVault({ onNavigate }: CreateVaultProps) {
                 error={errors.heirAddress}
                 helperText="Sole wallet address permitted to initialize claim sequences."
               />
+
+              <div className="text-left w-full">
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-350 mb-2">
+                  Heir Encryption Public Key (JWK)
+                </label>
+                <textarea
+                  className={`w-full rounded-xl border bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-100 placeholder-slate-450 dark:placeholder-slate-550 text-xs font-mono p-4 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none h-32 resize-y ${
+                    errors.heirEncryptionPublicKey
+                      ? 'border-rose-300 dark:border-rose-900/50 focus:ring-rose-500/20 focus:border-rose-500'
+                      : 'border-slate-200 dark:border-slate-800'
+                  }`}
+                  placeholder='{"kty":"EC","crv":"P-256","x":"...","y":"..."}'
+                  value={heirEncryptionPublicKey}
+                  onChange={(e) => setHeirEncryptionPublicKey(e.target.value)}
+                />
+                {errors.heirEncryptionPublicKey ? (
+                  <p className="mt-1.5 text-xs font-medium text-rose-600 dark:text-rose-450">
+                    {errors.heirEncryptionPublicKey}
+                  </p>
+                ) : (
+                  <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500 font-medium">
+                    The heir generates this key pair in Security and shares only the public key with you.
+                  </p>
+                )}
+              </div>
 
               <div className="text-left w-full">
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-350 mb-2">
@@ -246,10 +413,10 @@ export function CreateVault({ onNavigate }: CreateVaultProps) {
           <Card className="border-slate-100/70 p-6 md:p-8 flex flex-col gap-6.5">
             <CardHeader className="p-0 border-none m-0 text-left">
               <CardTitle icon={<ShieldCheck className="w-5.5 h-5.5 text-blue-500 shrink-0" />}>
-                Step 3: Client-Side AES-256 Encryption
+                Step 3: Client-Side Hybrid Encryption
               </CardTitle>
               <p className="text-xs md:text-sm text-slate-500 dark:text-slate-405 leading-relaxed mt-1">
-                Deriving secure keys using local browser PBKDF2 functions and broadcasting encrypted fragments.
+                The browser prepares an ECDH P-256 and AES-GCM envelope so only the heir private key can recover the payload.
               </p>
             </CardHeader>
 
@@ -272,15 +439,15 @@ export function CreateVault({ onNavigate }: CreateVaultProps) {
               <div className="bg-slate-50 dark:bg-slate-950/40 p-4 border border-slate-100 dark:border-slate-850 rounded-2xl flex flex-col gap-2.5 text-xs font-mono text-slate-600 dark:text-slate-350">
                 <div className="flex items-center gap-2">
                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${encryptionProgress >= 10 ? 'bg-emerald-500' : 'bg-slate-300 animate-ping'}`} />
-                  <span>[CIPHER] Configured AES-256-GCM block chaining.</span>
+                  <span>[ECDH] Validated heir P-256 public encryption key.</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${encryptionProgress >= 25 ? 'bg-emerald-500' : encryptionProgress >= 10 ? 'bg-slate-300 animate-ping' : 'bg-slate-200'}`} />
-                  <span>[KDF] PBKDF2 stretching complete. Derived browser symmetric key.</span>
+                  <span>[HKDF] Derived wrapping key from ephemeral ECDH shared secret.</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${encryptionProgress >= 45 ? 'bg-emerald-500' : encryptionProgress >= 25 ? 'bg-slate-300 animate-ping' : 'bg-slate-200'}`} />
-                  <span>[BLOC] Payload data blocks encrypted with derived symmetric key.</span>
+                  <span>[AES] Payload files encrypted locally with AES-256-GCM.</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${encryptionProgress >= 65 ? 'bg-emerald-500' : encryptionProgress >= 45 ? 'bg-slate-300 animate-ping' : 'bg-slate-200'}`} />
@@ -288,17 +455,17 @@ export function CreateVault({ onNavigate }: CreateVaultProps) {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${encryptionProgress >= 80 ? 'bg-emerald-500' : encryptionProgress >= 65 ? 'bg-slate-300 animate-ping' : 'bg-slate-200'}`} />
-                  <span>[SHAR] Fragmented payload into 3 independent encrypted files.</span>
+                  <span>[WRAP] Content key wrapped for the heir public key only.</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${encryptionProgress >= 100 ? 'bg-emerald-500' : encryptionProgress >= 80 ? 'bg-slate-300 animate-ping' : 'bg-slate-200'}`} />
-                  <span>[IPFS] Broadcasted shards to Paris, Tokyo, and New York network storage nodes.</span>
+                  <span>[IPFS] Encryption preflight ready for Pinata upload during deployment.</span>
                 </div>
               </div>
 
               {encryptionProgress === 100 && (
-                <Alert type="success" title="Local Cryptography Succeeded">
-                  Files are securely stored in a client-side fragmented state. The decryption keys are compiled and ready for smart contract binding.
+                <Alert type="success" title="Local Cryptography Preflight Ready">
+                  The real encryption runs locally right before Pinata upload, then the returned CID is recorded on-chain.
                 </Alert>
               )}
             </div>
@@ -325,7 +492,7 @@ export function CreateVault({ onNavigate }: CreateVaultProps) {
                     Inactivity Safety Period
                   </span>
                   <span className="text-lg font-extrabold text-blue-600 dark:text-blue-400">
-                    {inactivityDays} Days
+                    {inactivityDisplay}
                   </span>
                 </div>
                 <input
@@ -344,6 +511,40 @@ export function CreateVault({ onNavigate }: CreateVaultProps) {
                   <span>365 Days (Max)</span>
                 </div>
               </div>
+
+              {isDevMode && (
+                <div className="text-left flex flex-col gap-3 p-4 border border-blue-100 dark:border-blue-900/40 rounded-xl bg-blue-50/30 dark:bg-blue-950/10">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useQuickUnlock}
+                      onChange={(e) => setUseQuickUnlock(e.target.checked)}
+                      className="w-4 h-4 rounded text-blue-650 border-slate-300 focus:ring-blue-500/20 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                        Use Local Test Unlock Window
+                      </span>
+                      <span className="text-[10px] text-slate-450 dark:text-slate-500 block mt-0.5">
+                        Only visible on the Vite dev server, useful for end-to-end claim testing.
+                      </span>
+                    </div>
+                  </label>
+
+                  {useQuickUnlock && (
+                    <Input
+                      label="Unlock Delay In Seconds"
+                      type="number"
+                      min="5"
+                      max="3600"
+                      step="5"
+                      value={quickUnlockSeconds}
+                      onChange={(e) => setQuickUnlockSeconds(Number(e.target.value))}
+                      helperText="Try 30 or 60 seconds, then reconnect as the heir and claim."
+                    />
+                  )}
+                </div>
+              )}
 
               {/* Alert channels check */}
               <div className="text-left flex flex-col gap-4">
@@ -412,9 +613,15 @@ export function CreateVault({ onNavigate }: CreateVaultProps) {
                   <span className="text-slate-500">Designated Beneficiary Address</span>
                   <span className="font-bold font-mono text-slate-800 dark:text-slate-200">{sliceAddress(heirAddress)}</span>
                 </div>
+                <div className="flex justify-between items-center gap-4">
+                  <span className="text-slate-500">Encryption Recipient Key</span>
+                  <span className="font-bold font-mono text-slate-800 dark:text-slate-200 truncate max-w-[14rem]">
+                    {heirEncryptionPublicKey ? 'ECDH P-256 JWK loaded' : 'Missing'}
+                  </span>
+                </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500">Safety Window Threshold</span>
-                  <span className="font-bold text-blue-500">{inactivityDays} Days</span>
+                  <span className="font-bold text-blue-500">{inactivityDisplay}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500">Secure Payload Manifest</span>
@@ -436,21 +643,26 @@ export function CreateVault({ onNavigate }: CreateVaultProps) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="p-4 bg-slate-50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-850 rounded-xl">
                   <span className="text-4xs text-slate-450 uppercase tracking-widest font-bold block mb-1">
-                    Smart Contract Factory
+                    Smart Contract
                   </span>
                   <span className="text-xs font-bold text-slate-700 dark:text-slate-350 block mt-0.5">
-                    AegisVaultRegistry.sol
+                    AegisVault.sol
                   </span>
                 </div>
                 <div className="p-4 bg-slate-50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-850 rounded-xl">
                   <span className="text-4xs text-slate-450 uppercase tracking-widest font-bold block mb-1 flex items-center gap-1.5">
-                    Estimated Gas Fee
-                    <Tooltip content="Ethereum contract factory deploy base gas fee." iconOnly />
+                    Estimated Transaction Fee
+                    <Tooltip content="Estimated createVault gas using the active RPC gas price. The final value can change when the real IPFS CID is submitted." iconOnly />
                   </span>
                   <span className="text-xs font-bold text-slate-700 dark:text-slate-350 block mt-0.5 flex items-center gap-1.5">
-                    <Fuel className="w-4 h-4 text-blue-500" />
-                    0.0042 ETH (~$12.50)
+                    <Fuel className={`w-4 h-4 text-blue-500 ${isEstimatingGas ? 'animate-pulse' : ''}`} />
+                    {isEstimatingGas ? 'Estimating...' : gasEstimateDisplay}
                   </span>
+                  {visibleGasEstimateError && (
+                    <span className="text-[10px] text-rose-500 dark:text-rose-400 block mt-1 leading-snug">
+                      {visibleGasEstimateError}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -460,6 +672,16 @@ export function CreateVault({ onNavigate }: CreateVaultProps) {
                   Please connect your decentralized wallet at the top of the header bar to authorize on-chain deployment.
                 </Alert>
               )}
+
+              {wallet.connected && !aegisVaultAddress && (
+                <Alert type="danger">
+                  AegisVault is not configured on {wallet.network}. Deploy the contract on this network, then set {aegisVaultAddressEnvName}.
+                </Alert>
+              )}
+
+              <Alert type="warning">
+                Files are encrypted locally with the heir public key before Pinata upload. If the heir loses the matching private key, the IPFS payload cannot be recovered.
+              </Alert>
             </div>
           </Card>
         )}
@@ -504,7 +726,7 @@ export function CreateVault({ onNavigate }: CreateVaultProps) {
             size="sm"
             onClick={handleDeployVault}
             loading={isInitializing}
-            disabled={!wallet.connected}
+            disabled={!wallet.connected || !aegisVaultAddress}
             className="text-xs px-6 py-2.5 shadow-md shadow-blue-500/10 hover:-translate-y-[1px]"
             icon={<CheckCircle className="w-4.5 h-4.5 shrink-0" />}
           >

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useVaults } from '../hooks/useVaults';
+import { useWallet } from '../hooks/useWallet';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
@@ -22,6 +23,7 @@ type TabType = 'All' | 'Heartbeats' | 'Vaults' | 'Claims';
 
 export function ActivityExplorer({ onNavigate }: ActivityExplorerProps) {
   const { activities } = useVaults();
+  const { wallet } = useWallet();
   const { addToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<TabType>('All');
@@ -40,14 +42,27 @@ export function ActivityExplorer({ onNavigate }: ActivityExplorerProps) {
     // Search filtering
     const matchesSearch =
       act.desc.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      act.hash.toLowerCase().includes(searchTerm.toLowerCase());
+      act.hash.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (act.txFrom ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (act.relatedAddresses ?? []).some((address) => address.includes(searchTerm.toLowerCase()));
 
     if (!matchesSearch) return false;
 
     // Tab filtering
     if (activeTab === 'Heartbeats') return act.type === 'PingExecuted';
-    if (activeTab === 'Vaults') return act.type === 'VaultCreated' || act.type === 'HeirAssigned';
-    if (activeTab === 'Claims') return act.type === 'ClaimInitiated' || act.type === 'VaultDecrypted';
+    if (activeTab === 'Vaults') {
+      return [
+        'VaultCreated',
+        'VaultHeirUpdated',
+        'VaultCidUpdated',
+        'VaultRevoked',
+        'VaultLocked',
+        'HeirAssigned',
+      ].includes(act.type);
+    }
+    if (activeTab === 'Claims') {
+      return ['VaultClaimed', 'ClaimInitiated', 'VaultDecrypted'].includes(act.type);
+    }
     
     return true;
   });
@@ -78,9 +93,15 @@ export function ActivityExplorer({ onNavigate }: ActivityExplorerProps) {
       case 'PingExecuted':
         return 'badge-emerald';
       case 'HeirAssigned':
+      case 'VaultHeirUpdated':
+      case 'VaultCidUpdated':
+      case 'VaultLocked':
         return 'badge-slate';
       case 'ClaimInitiated':
+      case 'VaultClaimed':
         return 'badge-rose';
+      case 'VaultRevoked':
+        return 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300';
       case 'VaultDecrypted':
         return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300';
       default:
@@ -92,11 +113,30 @@ export function ActivityExplorer({ onNavigate }: ActivityExplorerProps) {
     switch (type) {
       case 'VaultCreated': return 'Vault Deployed';
       case 'PingExecuted': return 'Heartbeat Signature';
+      case 'VaultClaimed': return 'Vault Claimed';
+      case 'VaultRevoked': return 'Vault Revoked';
+      case 'VaultHeirUpdated': return 'Heir Updated';
+      case 'VaultCidUpdated': return 'CID Updated';
+      case 'VaultLocked': return 'Vault Locked';
       case 'HeirAssigned': return 'Heir Appointed';
       case 'ClaimInitiated': return 'Claim Dispatched';
       case 'VaultDecrypted': return 'Decryption Key Lock';
       default: return type;
     }
+  };
+
+  const isWalletTransaction = (txFrom?: string) => {
+    return Boolean(
+      wallet.address &&
+      txFrom &&
+      txFrom.toLowerCase() === wallet.address.toLowerCase(),
+    );
+  };
+
+  const getGasLabel = (gasUsed: string, txFrom?: string) => {
+    if (isWalletTransaction(txFrom)) return gasUsed;
+    if (txFrom) return `Paid by ${sliceAddress(txFrom)}`;
+    return 'n/a';
   };
 
   return (
@@ -111,10 +151,10 @@ export function ActivityExplorer({ onNavigate }: ActivityExplorerProps) {
           </div>
           <h1 className="text-2xl md:text-3.5xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
             <ArrowRightLeft className="w-7 h-7 text-blue-500" />
-            Audit Ledger Explorer
+            My Activity Ledger
           </h1>
           <p className="text-xs md:text-sm text-slate-500 dark:text-slate-405 leading-relaxed mt-1">
-            Real-time public block ledger tracking safety timers, heartbeat triggers, and decentralized inheritance contract logs.
+            Wallet-scoped contract activity for vaults you own, inherit, or transactions you signed.
           </p>
         </div>
         <div className="flex gap-2.5">
@@ -180,25 +220,25 @@ export function ActivityExplorer({ onNavigate }: ActivityExplorerProps) {
           <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800/80">
             <thead className="bg-slate-50 dark:bg-slate-950/60 text-left">
               <tr>
-                <th className="px-6 py-4.5 text-3xs font-extrabold uppercase tracking-widest text-slate-450">
+                <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-normal text-slate-450">
                   Transaction Hash
                 </th>
-                <th className="px-6 py-4.5 text-3xs font-extrabold uppercase tracking-widest text-slate-450">
+                <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-normal text-slate-450">
                   Block Height
                 </th>
-                <th className="px-6 py-4.5 text-3xs font-extrabold uppercase tracking-widest text-slate-450">
+                <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-normal text-slate-450">
                   Event Registry
                 </th>
-                <th className="px-6 py-4.5 text-3xs font-extrabold uppercase tracking-widest text-slate-450">
+                <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-normal text-slate-450">
                   Audit Details
                 </th>
-                <th className="px-6 py-4.5 text-3xs font-extrabold uppercase tracking-widest text-slate-450">
+                <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-normal text-slate-450">
                   Date / Time
                 </th>
-                <th className="px-6 py-4.5 text-3xs font-extrabold uppercase tracking-widest text-slate-450">
-                  Gas Fee Spent
+                <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-normal text-slate-450">
+                  Wallet Gas
                 </th>
-                <th className="px-6 py-4.5 text-3xs font-extrabold uppercase tracking-widest text-slate-450 text-right">
+                <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-normal text-slate-450 text-right">
                   Tx Status
                 </th>
               </tr>
@@ -239,7 +279,7 @@ export function ActivityExplorer({ onNavigate }: ActivityExplorerProps) {
                     {act.date}
                   </td>
                   <td className="px-6 py-4.5 text-slate-500 dark:text-slate-400 font-mono">
-                    {act.gasUsed}
+                    {getGasLabel(act.gasUsed, act.txFrom)}
                   </td>
                   <td className="px-6 py-4.5 text-right">
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-3xs font-extrabold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 rounded-full border border-emerald-100/60 dark:border-emerald-900/40">

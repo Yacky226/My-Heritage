@@ -1,12 +1,14 @@
-import { useVaults } from '../hooks/useVaults';
-import { useClaims } from '../hooks/useClaims';
-import { StatCard } from '../components/dashboard/StatCard';
-import { HeartbeatPanel } from '../components/dashboard/HeartbeatPanel';
-import { ActivityTimeline } from '../components/dashboard/ActivityTimeline';
-import { Card, CardHeader, CardTitle } from '../components/ui/Card';
-import { Badge } from '../components/ui/Badge';
-import { Button } from '../components/ui/Button';
-import { sliceAddress } from '../utils/format';
+import { useMemo } from "react";
+import { useVaults } from "../hooks/useVaults";
+import { useClaims } from "../hooks/useClaims";
+import { useWallet } from "../hooks/useWallet";
+import { StatCard } from "../components/dashboard/StatCard";
+import { HeartbeatPanel } from "../components/dashboard/HeartbeatPanel";
+import { ActivityTimeline } from "../components/dashboard/ActivityTimeline";
+import { Card, CardHeader, CardTitle } from "../components/ui/Card";
+import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
+import { sliceAddress } from "../utils/format";
 import {
   Vault,
   Users,
@@ -15,42 +17,67 @@ import {
   Plus,
   ArrowUpRight,
   TrendingUp,
-  AlertCircle
-} from 'lucide-react';
+  AlertCircle,
+} from "lucide-react";
 
 interface DashboardProps {
   onNavigate: (pageId: string) => void;
 }
 
+function parseGasUsed(gasUsed: string) {
+  const normalized = gasUsed.replace(/[^\d]/g, "");
+  return normalized ? Number(normalized) : 0;
+}
+
+function formatGasTotal(gas: number) {
+  if (gas >= 1_000_000) return `${(gas / 1_000_000).toFixed(2)}M gas`;
+  if (gas >= 1_000) return `${(gas / 1_000).toFixed(1)}K gas`;
+  return `${gas.toLocaleString()} gas`;
+}
+
 export function Dashboard({ onNavigate }: DashboardProps) {
-  const { vaults } = useVaults();
+  const { vaults, activities, isLoading } = useVaults();
   const { getInheritances } = useClaims();
+  const { wallet } = useWallet();
 
-  // Compute actual dynamic statistics based on loaded vaults state!
+  const inheritances = getInheritances();
   const totalVaults = vaults.length;
-  
-  // Count unique heir addresses
-  const uniqueHeirs = Array.from(new Set(vaults.map((v) => v.heir.toLowerCase()))).length;
-  
-  // Calculate average security score based on number of configured parameters
-  let securityScore = 0;
-  if (totalVaults > 0) {
-    const totalPossiblePoints = totalVaults * 3;
-    let earnedPoints = 0;
-    vaults.forEach((v) => {
-      if (v.inactivityDays > 0) earnedPoints++;
-      if (v.heir) earnedPoints++;
-      if (v.files && v.files.length > 0) earnedPoints++;
-    });
-    securityScore = Math.round((earnedPoints / totalPossiblePoints) * 100);
-  } else {
-    securityScore = 0;
-  }
+  const activeVaults = vaults.filter((vault) => vault.status === "Active").length;
+  const claimableCount = inheritances.filter((claim) => claim.canClaim).length;
 
-  // Count how many inheritances are pending claim in the inbox
-  const claimableCount = getInheritances().filter(
-    (c) => c.status === 'Locked' || c.status === 'Cooldown'
+  const uniqueHeirs = Array.from(
+    new Set(vaults.map((vault) => vault.heir.toLowerCase())),
   ).length;
+
+  const securityScore = useMemo(() => {
+    if (totalVaults === 0) return 0;
+
+    const earnedPoints = vaults.reduce((score, vault) => {
+      let nextScore = score;
+      if (vault.heir) nextScore += 1;
+      if (vault.ipfsCid || (vault.files && vault.files.length > 0)) nextScore += 1;
+      if ((vault.inactivityDelaySeconds ?? 0) > 0) nextScore += 1;
+      if (!vault.revoked && !vault.claimed) nextScore += 1;
+      return nextScore;
+    }, 0);
+
+    return Math.round((earnedPoints / (totalVaults * 4)) * 100);
+  }, [totalVaults, vaults]);
+
+  const gasEvents = activities.filter((activity) => parseGasUsed(activity.gasUsed) > 0);
+  const walletActionActivities = wallet.address
+    ? gasEvents.filter((activity) => activity.txFrom?.toLowerCase() === wallet.address?.toLowerCase())
+    : [];
+  const walletGasUsed = walletActionActivities.reduce(
+    (total, activity) => total + parseGasUsed(activity.gasUsed),
+    0,
+  );
+  const averageGasUsed = walletActionActivities.length > 0
+    ? Math.round(walletGasUsed / walletActionActivities.length)
+    : 0;
+  const userLabel = wallet.address
+    ? sliceAddress(wallet.address)
+    : "connect your wallet";
 
   return (
     <div className="flex flex-col gap-8 text-left select-none">
@@ -66,12 +93,16 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             Security Overview
           </h1>
           <p className="text-xs md:text-sm text-slate-500 dark:text-slate-405 leading-relaxed mt-1">
-            Welcome back, <strong className="text-slate-800 dark:text-slate-200 font-semibold">Alex Web3</strong>. Your cryptographic heritage is secure and monitored.
+            Welcome back,{" "}
+            <strong className="text-slate-800 dark:text-slate-200 font-semibold">
+              {userLabel}
+            </strong>
+            . Your on-chain legacy vaults are synchronized from the active wallet.
           </p>
         </div>
         <Button
           size="sm"
-          onClick={() => onNavigate('create')}
+          onClick={() => onNavigate("create")}
           icon={<Plus className="w-4 h-4 shrink-0" />}
           className="shadow-md shadow-blue-500/10"
         >
@@ -94,14 +125,19 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 Beneficiary Action Required
               </h5>
               <p className="text-xs text-rose-600 dark:text-rose-400 leading-relaxed mt-0.5">
-                You have <strong className="font-semibold">{claimableCount} pending inheritance vault claim{claimableCount > 1 ? 's' : ''}</strong> ready to unseal in your inbox.
+                You have{" "}
+                <strong className="font-semibold">
+                  {claimableCount} pending inheritance vault claim
+                  {claimableCount > 1 ? "s" : ""}
+                </strong>{" "}
+                ready to unseal in your inbox.
               </p>
             </div>
           </div>
           <Button
             variant="danger"
             size="sm"
-            onClick={() => onNavigate('heir')}
+            onClick={() => onNavigate("heir")}
             className="text-xs px-4 py-2 hover:bg-rose-100"
           >
             Access Heir Inbox
@@ -115,15 +151,19 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           label="Total Secure Vaults"
           value={totalVaults}
           icon={<Vault className="w-5.5 h-5.5" />}
-          trend="1 active this month"
-          trendType="positive"
+          trend={
+            isLoading
+              ? "Synchronizing on-chain vaults"
+              : `${activeVaults} active / ${Math.max(totalVaults - activeVaults, 0)} sealed`
+          }
+          trendType={activeVaults > 0 ? "positive" : "neutral"}
           color="blue"
         />
         <StatCard
           label="Heirs Designated"
           value={uniqueHeirs}
           icon={<Users className="w-5.5 h-5.5" />}
-          trend="On-chain registry synchronized"
+          trend={totalVaults > 0 ? "Unique beneficiary wallets" : "No beneficiaries registered"}
           trendType="neutral"
           color="emerald"
         />
@@ -131,15 +171,21 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           label="Security Health Score"
           value={`${securityScore}%`}
           icon={<ShieldCheck className="w-5.5 h-5.5" />}
-          trend="Health check: Excellent"
-          trendType="positive"
+          trend={
+            totalVaults === 0
+              ? "Create a vault to start scoring"
+              : securityScore >= 80
+                ? "Health check: strong"
+                : "Review vault configuration"
+          }
+          trendType={securityScore >= 80 ? "positive" : totalVaults > 0 ? "negative" : "neutral"}
           color="purple"
         />
         <StatCard
-          label="Gas Spent (All-Time)"
-          value="0.384 ETH"
+          label="Gas Used (Your Actions)"
+          value={formatGasTotal(walletGasUsed)}
           icon={<Fuel className="w-5.5 h-5.5" />}
-          trend="Avg 0.0024 ETH per heartbeat"
+          trend={averageGasUsed > 0 ? `Avg ${formatGasTotal(averageGasUsed)} per tx` : "No wallet transactions yet"}
           trendType="neutral"
           color="rose"
         />
@@ -149,7 +195,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full items-stretch">
         {/* Critical heartbeat timer action widget */}
         <div className="lg:col-span-8 flex flex-col">
-          <HeartbeatPanel onConfigureTimer={() => onNavigate('settings')} />
+          <HeartbeatPanel onConfigureTimer={() => onNavigate("settings")} />
         </div>
 
         {/* Recent Audit Ledger */}
@@ -161,7 +207,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                   Recent Activity
                 </CardTitle>
                 <button
-                  onClick={() => onNavigate('activity')}
+                  onClick={() => onNavigate("activity")}
                   className="text-2xs font-extrabold text-blue-500 hover:underline cursor-pointer"
                 >
                   View All
@@ -184,7 +230,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => onNavigate('vaults')}
+            onClick={() => onNavigate("vaults")}
             className="text-xs font-bold text-slate-500 hover:text-slate-900"
             icon={<ArrowUpRight className="w-4 h-4 shrink-0" />}
           >
@@ -197,19 +243,19 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
               <thead className="bg-slate-50 dark:bg-slate-950/60 text-left">
                 <tr>
-                  <th className="px-6 py-4.5 text-3xs font-extrabold uppercase tracking-widest text-slate-450">
+                  <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-normal text-slate-450">
                     Vault Config Name
                   </th>
-                  <th className="px-6 py-4.5 text-3xs font-extrabold uppercase tracking-widest text-slate-450">
+                  <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-normal text-slate-450">
                     Heir Address (Beneficiary)
                   </th>
-                  <th className="px-6 py-4.5 text-3xs font-extrabold uppercase tracking-widest text-slate-450">
+                  <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-normal text-slate-450">
                     Safety Status
                   </th>
-                  <th className="px-6 py-4.5 text-3xs font-extrabold uppercase tracking-widest text-slate-450">
+                  <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-normal text-slate-450">
                     File Package Specs
                   </th>
-                  <th className="px-6 py-4.5 text-3xs font-extrabold uppercase tracking-widest text-slate-450">
+                  <th className="px-6 py-3 text-[10px] font-bold uppercase tracking-normal text-slate-450">
                     Inactivity Threshold
                   </th>
                 </tr>
@@ -218,7 +264,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 {vaults.slice(0, 3).map((v) => (
                   <tr
                     key={v.id}
-                    onClick={() => onNavigate('vaults')}
+                    onClick={() => onNavigate("vaults")}
                     className="hover:bg-slate-50/50 dark:hover:bg-slate-850/40 transition-colors cursor-pointer text-xs"
                   >
                     <td className="px-6 py-4 font-bold text-slate-850 dark:text-slate-200">
@@ -231,18 +277,23 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                       <Badge status={v.status} />
                     </td>
                     <td className="px-6 py-4 text-slate-500 dark:text-slate-400 font-medium">
-                      {v.fileCount} file{v.fileCount > 1 ? 's' : ''} ({v.fileSize})
+                      {v.fileCount} file{v.fileCount > 1 ? "s" : ""} (
+                      {v.fileSize})
                     </td>
                     <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-300">
                       {v.inactivityTimer}
                     </td>
                   </tr>
                 ))}
-                
+
                 {vaults.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-slate-400 dark:text-slate-500 font-medium">
-                      No digital vaults deployed. Click "New Digital Vault" to start your legacy setup.
+                    <td
+                      colSpan={5}
+                      className="px-6 py-8 text-center text-slate-400 dark:text-slate-500 font-medium"
+                    >
+                      No digital vaults deployed. Click "New Digital Vault" to
+                      start your legacy setup.
                     </td>
                   </tr>
                 )}

@@ -22,7 +22,8 @@ import {
   UserPlus,
   Trash2,
   FileText,
-  Lock
+  Lock,
+  RefreshCw
 } from 'lucide-react';
 
 interface VaultsProps {
@@ -30,7 +31,7 @@ interface VaultsProps {
 }
 
 export function Vaults({ onNavigate }: VaultsProps) {
-  const { vaults, pingVault, updateVaultHeir, deleteVault, isLoading } = useVaults();
+  const { vaults, pingVault, updateVaultHeir, deleteVault, refetch, isLoading } = useVaults();
   
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
@@ -57,16 +58,18 @@ export function Vaults({ onNavigate }: VaultsProps) {
     setHeirEditOpen(true);
   };
 
-  const handleHeirUpdateSubmit = () => {
+  const handleHeirUpdateSubmit = async () => {
     if (!selectedVault) return;
     if (!newHeirAddress.trim().startsWith('0x') || newHeirAddress.length !== 42) {
       setHeirError('Invalid address. Must be a 42-character Ethereum address (0x...)');
       return;
     }
     setHeirError('');
-    updateVaultHeir(selectedVault.id, newHeirAddress);
-    setSelectedVault((prev) => prev ? { ...prev, heir: newHeirAddress } : null);
-    setHeirEditOpen(false);
+    const success = await updateVaultHeir(selectedVault.id, newHeirAddress);
+    if (success) {
+      setSelectedVault((prev) => prev ? { ...prev, heir: newHeirAddress } : null);
+      setHeirEditOpen(false);
+    }
   };
 
   const handleDetailsHeartbeat = async () => {
@@ -95,6 +98,7 @@ export function Vaults({ onNavigate }: VaultsProps) {
     
     return matchesSearch && matchesStatus;
   });
+  const showInitialLoading = isLoading && vaults.length === 0;
 
   return (
     <div className="flex flex-col gap-8 text-left select-none">
@@ -113,14 +117,26 @@ export function Vaults({ onNavigate }: VaultsProps) {
             Manage files encrypted locally using AES-256 and configure secure, automated heir delivery smart contracts.
           </p>
         </div>
-        <Button
-          size="sm"
-          onClick={() => onNavigate('create')}
-          icon={<Plus className="w-4 h-4 shrink-0" />}
-          className="shadow-md shadow-blue-500/10 shrink-0"
-        >
-          Create Vault
-        </Button>
+        <div className="flex gap-2 shrink-0">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={refetch}
+            loading={isLoading}
+            icon={<RefreshCw className="w-4 h-4 shrink-0" />}
+            className="shadow-sm"
+          >
+            Refresh
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => onNavigate('create')}
+            icon={<Plus className="w-4 h-4 shrink-0" />}
+            className="shadow-md shadow-blue-500/10"
+          >
+            Create Vault
+          </Button>
+        </div>
       </div>
 
       {/* Search and Filters bar */}
@@ -180,7 +196,13 @@ export function Vaults({ onNavigate }: VaultsProps) {
       </div>
 
       {/* Vault Grid/List display */}
-      {filteredVaults.length > 0 ? (
+      {showInitialLoading ? (
+        <EmptyState
+          icon={<RefreshCw className="w-8 h-8 text-slate-450 animate-spin" />}
+          title="Loading On-Chain Vaults"
+          description="Reading the AegisVault contract for vaults owned by the connected wallet."
+        />
+      ) : filteredVaults.length > 0 ? (
         viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6.5 w-full">
             {filteredVaults.map((vault) => (
@@ -355,7 +377,7 @@ export function Vaults({ onNavigate }: VaultsProps) {
                     <code className="text-xs font-bold font-mono tracking-tight text-slate-700 dark:text-slate-200">
                       {selectedVault.heir}
                     </code>
-                    <span className="text-[9px] text-slate-450 dark:text-slate-500 mt-0.5">Authorized to download decryption shards</span>
+                    <span className="text-[9px] text-slate-450 dark:text-slate-500 mt-0.5">Authorized to claim and decrypt the IPFS payload</span>
                   </div>
                 </div>
               )}
@@ -389,7 +411,7 @@ export function Vaults({ onNavigate }: VaultsProps) {
               <div className="flex items-start gap-2.5 text-xs text-amber-800 dark:text-amber-350">
                 <Lock className="w-4.5 h-4.5 text-amber-500 shrink-0 mt-0.5" />
                 <p>
-                  Files are distributed across encrypted IPFS shards. They can only be assembled and unsealed by the designated heir address after inactivity threshold limits lapse.
+                  Files are stored as an encrypted IPFS payload. They can only be decrypted with the heir private encryption key after the inactivity threshold expires and the claim succeeds on-chain.
                 </p>
               </div>
             </Alert>

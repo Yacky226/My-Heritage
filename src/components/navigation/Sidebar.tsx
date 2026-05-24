@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react';
 import { useWallet } from '../../hooks/useWallet';
 import { useClaims } from '../../hooks/useClaims';
+import { useVaults } from '../../hooks/useVaults';
 import { sliceAddress } from '../../utils/format';
 import {
   ShieldAlert,
@@ -23,24 +25,41 @@ interface SidebarProps {
   setCollapsed: (collapsed: boolean) => void;
 }
 
+type NavItem = {
+  id: string;
+  icon: ReactNode;
+  label: string;
+  badge?: number;
+  urgent?: boolean;
+};
+
 export function Sidebar({ currentPage, onNavigate, collapsed, setCollapsed }: SidebarProps) {
   const { wallet, disconnectWallet } = useWallet();
   const { getInheritances } = useClaims();
+  const { vaults } = useVaults();
 
-  // Find how many claims are currently Locked (claimable) or Cooldown (in-progress)
-  const claimableCount = getInheritances().filter(
-    (c) => c.status === 'Locked' || c.status === 'Cooldown'
+  const inheritances = getInheritances();
+  const claimableCount = inheritances.filter((claim) => claim.canClaim).length;
+  const ownerActionCount = vaults.filter(
+    (vault) => vault.isClaimable && !vault.revoked && !vault.claimed,
   ).length;
 
-  const navItems = [
+  const navItems: NavItem[] = [
     { id: 'dashboard', icon: <LayoutDashboard className="w-5 h-5" />, label: 'Dashboard' },
-    { id: 'vaults', icon: <VaultIcon className="w-5 h-5" />, label: 'My Vaults' },
+    {
+      id: 'vaults',
+      icon: <VaultIcon className="w-5 h-5" />,
+      label: 'My Vaults',
+      badge: ownerActionCount > 0 ? ownerActionCount : undefined,
+      urgent: ownerActionCount > 0,
+    },
     { id: 'create', icon: <PlusCircle className="w-5 h-5" />, label: 'Create Vault' },
     {
       id: 'heir',
       icon: <Inbox className="w-5 h-5" />,
       label: 'Heir Inbox',
       badge: claimableCount > 0 ? claimableCount : undefined,
+      urgent: claimableCount > 0,
     },
     { id: 'activity', icon: <Activity className="w-5 h-5" />, label: 'Activity' },
     { id: 'security', icon: <ShieldCheck className="w-5 h-5" />, label: 'Security' },
@@ -108,13 +127,13 @@ export function Sidebar({ currentPage, onNavigate, collapsed, setCollapsed }: Si
               </div>
 
               {!collapsed && item.badge !== undefined && (
-                <span className="bg-rose-500 text-white font-bold text-2xs px-2 py-0.5 rounded-full animate-pulse shrink-0">
+                <span className={`${item.urgent ? 'bg-rose-500 animate-pulse' : 'bg-blue-500'} text-white font-bold text-2xs px-2 py-0.5 rounded-full shrink-0`}>
                   {item.badge}
                 </span>
               )}
 
               {collapsed && item.badge !== undefined && (
-                <div className="absolute left-14 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-slate-900" />
+                <div className={`absolute left-14 w-2 h-2 rounded-full ring-2 ring-slate-900 ${item.urgent ? 'bg-rose-500' : 'bg-blue-500'}`} />
               )}
             </button>
           );
@@ -131,7 +150,7 @@ export function Sidebar({ currentPage, onNavigate, collapsed, setCollapsed }: Si
             {!collapsed && (
               <div className="flex flex-col text-left overflow-hidden">
                 <span className="font-bold text-xs text-slate-250 truncate">
-                  Alex Web3
+                  {wallet.provider ?? 'Connected Wallet'}
                 </span>
                 <span className="text-[10px] text-emerald-450 font-mono tracking-tight flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
@@ -141,7 +160,16 @@ export function Sidebar({ currentPage, onNavigate, collapsed, setCollapsed }: Si
             )}
           </div>
 
-          {!collapsed && (
+          {collapsed ? (
+            <button
+              onClick={disconnectWallet}
+              title="Disconnect Wallet"
+              aria-label="Disconnect Wallet"
+              className="w-10 h-10 mx-auto flex items-center justify-center bg-slate-800/40 text-slate-400 hover:text-rose-400 hover:bg-rose-950/20 rounded-xl border border-slate-800 hover:border-rose-900/30 transition-all cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          ) : (
             <button
               onClick={disconnectWallet}
               className="w-full flex items-center justify-center gap-2 p-2 bg-slate-800/40 text-slate-400 hover:text-rose-400 hover:bg-rose-950/20 rounded-xl text-xs font-bold border border-slate-800 hover:border-rose-900/30 transition-all cursor-pointer"

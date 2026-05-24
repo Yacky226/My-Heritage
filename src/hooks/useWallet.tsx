@@ -7,25 +7,32 @@ import {
   useDisconnect,
   useChainId,
   useSignMessage,
+  useSwitchChain,
 } from 'wagmi';
 import { hardhat } from 'wagmi/chains';
 import type { WalletState } from '../types';
 import { useToast } from './useToast';
+import {
+  isSupportedChainId,
+  supportedNetworks,
+} from '../web3/config';
 
 interface WalletContextProps {
   wallet: WalletState;
   connectWallet: (providerName: string) => Promise<boolean>;
   disconnectWallet: () => void;
-  switchNetwork: (networkName: string) => void;
+  switchNetwork: (chainId: number) => Promise<boolean>;
   signMessageSimulated: (msg: string) => Promise<string | null>;
   isConnecting: boolean;
   activeProvider: string | null;
+  supportedNetworks: typeof supportedNetworks;
 }
 
 const WalletContext = createContext<WalletContextProps | undefined>(undefined);
 
 function getNetworkName(chainId?: number) {
-  if (chainId === hardhat.id) return 'Hardhat Local';
+  const supportedNetwork = supportedNetworks.find((network) => network.id === chainId);
+  if (supportedNetwork) return supportedNetwork.name;
   if (!chainId) return 'Unknown Network';
   return `Chain ${chainId}`;
 }
@@ -40,6 +47,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const connectMutation = useConnect();
   const disconnectMutation = useDisconnect();
   const signMessageMutation = useSignMessage();
+  const switchChainMutation = useSwitchChain();
 
   const wallet: WalletState = {
     connected: connection.isConnected,
@@ -63,7 +71,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
         await connectMutation.mutateAsync({
           connector: selectedConnector,
-          chainId: hardhat.id,
+          chainId: isSupportedChainId(chainId) ? chainId : hardhat.id,
         });
 
         addToast('Wallet connected successfully', 'success', 2500);
@@ -74,7 +82,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return false;
       }
     },
-    [connectors, connectMutation, addToast],
+    [chainId, connectors, connectMutation, addToast],
   );
 
   const disconnectWallet = useCallback(() => {
@@ -83,10 +91,30 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [disconnectMutation, addToast]);
 
   const switchNetwork = useCallback(
-    (_networkName: string) => {
-      addToast('Please switch network from your wallet if needed', 'info', 3000);
+    async (nextChainId: number): Promise<boolean> => {
+      const targetNetwork = supportedNetworks.find((network) => network.id === nextChainId);
+
+      if (!targetNetwork) {
+        addToast(`Chain ${nextChainId} is not supported by Aegis`, 'error', 3000);
+        return false;
+      }
+
+      if (chainId === nextChainId) {
+        return true;
+      }
+
+      try {
+        addToast(`Switching to ${targetNetwork.name}...`, 'info', 1500);
+        await switchChainMutation.switchChainAsync({ chainId: nextChainId });
+        addToast(`Network switched to ${targetNetwork.name}`, 'success', 2500);
+        return true;
+      } catch (error) {
+        console.error(error);
+        addToast(`Unable to switch to ${targetNetwork.name}`, 'error', 3000);
+        return false;
+      }
     },
-    [addToast],
+    [addToast, chainId, switchChainMutation],
   );
 
   const signMessageSimulated = useCallback(
@@ -122,8 +150,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         disconnectWallet,
         switchNetwork,
         signMessageSimulated,
-        isConnecting: connectMutation.isPending,
+        isConnecting: connectMutation.isPending || switchChainMutation.isPending,
         activeProvider: connectMutation.variables?.connector?.name ?? null,
+        supportedNetworks,
       }}
     >
       {children}

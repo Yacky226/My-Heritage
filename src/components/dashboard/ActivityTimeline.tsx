@@ -2,7 +2,7 @@ import { useVaults } from '../../hooks/useVaults';
 import { useToast } from '../../hooks/useToast';
 import { sliceAddress } from '../../utils/format';
 import { Badge } from '../ui/Badge';
-import { Vault as VaultIcon, ShieldAlert, Key, Link as LinkIcon, User } from 'lucide-react';
+import { Vault as VaultIcon, ShieldAlert, Key, Link as LinkIcon, User, Lock, Trash2, FileText } from 'lucide-react';
 
 export function ActivityTimeline() {
   const { activities } = useVaults();
@@ -11,6 +11,11 @@ export function ActivityTimeline() {
   const iconMap = {
     VaultCreated: <VaultIcon className="w-4 h-4 text-blue-500" />,
     PingExecuted: <ShieldAlert className="w-4 h-4 text-emerald-500 animate-[pulse_1.5s_infinite]" />,
+    VaultClaimed: <ShieldAlert className="w-4 h-4 text-rose-500" />,
+    VaultRevoked: <Trash2 className="w-4 h-4 text-rose-500" />,
+    VaultHeirUpdated: <User className="w-4 h-4 text-purple-500" />,
+    VaultCidUpdated: <FileText className="w-4 h-4 text-slate-500" />,
+    VaultLocked: <Lock className="w-4 h-4 text-amber-500" />,
     HeirAssigned: <User className="w-4 h-4 text-purple-500" />,
     ClaimInitiated: <ShieldAlert className="w-4 h-4 text-rose-500" />,
     VaultDecrypted: <Key className="w-4 h-4 text-indigo-500" />,
@@ -63,7 +68,7 @@ export function ActivityTimeline() {
       ))}
 
       {activities.length === 0 && (
-        <p className="text-sm text-slate-400 text-center py-6">No recent on-chain activities recorded.</p>
+        <p className="text-sm text-slate-400 text-center py-6">No recent wallet activity recorded.</p>
       )}
     </div>
   );

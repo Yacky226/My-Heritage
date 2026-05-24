@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useWallet } from '../../hooks/useWallet';
 import { useToast } from '../../hooks/useToast';
+import { useAegisNotifications } from '../../hooks/useAegisNotifications';
 import { sliceAddress } from '../../utils/format';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
@@ -15,32 +16,75 @@ import {
 
 interface TopHeaderProps {
   onMenuToggle: () => void;
+  onNavigate: (pageId: string) => void;
 }
 
-export function TopHeader({ onMenuToggle }: TopHeaderProps) {
-  const { wallet, connectWallet, switchNetwork, isConnecting } = useWallet();
+function readDismissedNotificationIds(storageKey: string) {
+  if (typeof window === 'undefined') return new Set<string>();
+
+  try {
+    const storedValue = window.localStorage.getItem(storageKey);
+    const parsedValue = storedValue ? JSON.parse(storedValue) : [];
+    return new Set(Array.isArray(parsedValue) ? parsedValue.filter((id) => typeof id === 'string') : []);
+  } catch (error) {
+    console.error(error);
+    return new Set<string>();
+  }
+}
+
+function writeDismissedNotificationIds(storageKey: string, ids: Set<string>) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(storageKey, JSON.stringify(Array.from(ids)));
+}
+
+export function TopHeader({ onMenuToggle, onNavigate }: TopHeaderProps) {
+  const { wallet, connectWallet, switchNetwork, isConnecting, supportedNetworks } = useWallet();
   const { addToast } = useToast();
+  const { notifications, isLoading: notificationsLoading } = useAegisNotifications();
   
   const [networkOpen, setNetworkOpen] = useState(false);
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [, setDismissedRevision] = useState(0);
 
-  const networks = ['Ethereum Mainnet', 'Arbitrum One', 'Optimism', 'Base'];
+  const notificationStorageKey = wallet.address
+    ? `aegis:dismissed-notifications:${wallet.address.toLowerCase()}`
+    : 'aegis:dismissed-notifications:disconnected';
+  const dismissedNotificationIds = readDismissedNotificationIds(notificationStorageKey);
+  const visibleNotifications = notifications.filter(
+    (notification) => !dismissedNotificationIds.has(notification.id),
+  );
+  const visibleUrgentCount = visibleNotifications.filter((notification) => notification.urgent).length;
 
-  const notifications = [
-    { id: 1, title: 'Proof of Life low', desc: 'Family Seed Phrases requires a heartbeat in 48 hours.', time: '2h ago', urgent: true },
-    { id: 2, title: 'New Vault initialized', desc: 'Vault "Passport & Will Draft" deployed successfully.', time: '1d ago', urgent: false },
-    { id: 3, title: 'Backup Phrase Exported', desc: 'Your master decryption key was successfully downloaded.', time: '3d ago', urgent: false },
-  ];
+  useEffect(() => {
+    const refreshDismissedState = () => setDismissedRevision((value) => value + 1);
+    window.addEventListener('aegis-settings-updated', refreshDismissedState);
+    return () => window.removeEventListener('aegis-settings-updated', refreshDismissedState);
+  }, []);
 
   const handleWalletSelect = async (provider: string) => {
     setWalletModalOpen(false);
     await connectWallet(provider);
   };
 
-  const handleNetworkSelect = (network: string) => {
-    switchNetwork(network);
+  const handleNetworkSelect = async (chainId: number) => {
+    await switchNetwork(chainId);
     setNetworkOpen(false);
+  };
+
+  const handleClearNotifications = () => {
+    const nextDismissedIds = new Set(dismissedNotificationIds);
+
+    notifications.forEach((notification) => nextDismissedIds.add(notification.id));
+    writeDismissedNotificationIds(notificationStorageKey, nextDismissedIds);
+    setDismissedRevision((value) => value + 1);
+    setNotificationsOpen(false);
+    addToast('Notifications cleared', 'success');
+  };
+
+  const handleNotificationClick = (pageId: string) => {
+    onNavigate(pageId);
+    setNotificationsOpen(false);
   };
 
   return (
@@ -71,20 +115,21 @@ export function TopHeader({ onMenuToggle }: TopHeaderProps) {
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setNetworkOpen(false)} />
                 <div className="absolute top-full left-0 mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-xl z-20 py-1.5 overflow-hidden">
-                  {networks.map((net) => (
+                  {supportedNetworks.map((net) => (
                     <button
-                      key={net}
-                      onClick={() => handleNetworkSelect(net)}
+                      key={net.id}
+                      onClick={() => handleNetworkSelect(net.id)}
+                      disabled={isConnecting}
                       className={`w-full text-left px-4 py-2 text-xs font-semibold transition-colors flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-850 cursor-pointer
                         ${
-                          wallet.network === net
+                          wallet.network === net.name
                             ? 'text-blue-500 dark:text-blue-400 bg-blue-50/20 dark:bg-blue-950/10'
                             : 'text-slate-600 dark:text-slate-400'
                         }
                       `}
                     >
-                      <span>{net}</span>
-                      {wallet.network === net && <CheckCircle className="w-3.5 h-3.5 text-blue-500" />}
+                      <span>{net.name}</span>
+                      {wallet.network === net.name && <CheckCircle className="w-3.5 h-3.5 text-blue-500" />}
                     </button>
                   ))}
                 </div>
@@ -104,7 +149,13 @@ export function TopHeader({ onMenuToggle }: TopHeaderProps) {
               className="w-10 h-10 rounded-full border border-slate-100 dark:border-slate-800 flex items-center justify-center text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-850 cursor-pointer transition-colors relative"
             >
               <Bell className="w-4.5 h-4.5" />
-              <span className="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-rose-500 border border-white dark:border-slate-900 animate-pulse" />
+              {visibleNotifications.length > 0 && (
+                <span className={`absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full border border-white dark:border-slate-900 text-[10px] leading-5 text-white font-extrabold text-center ${
+                  visibleUrgentCount > 0 ? 'bg-rose-500 animate-pulse' : 'bg-blue-500'
+                }`}>
+                  {Math.min(visibleNotifications.length, 9)}
+                </span>
+              )}
             </button>
 
             {notificationsOpen && (
@@ -113,21 +164,32 @@ export function TopHeader({ onMenuToggle }: TopHeaderProps) {
                 <div className="absolute top-full right-0 mt-2 w-80 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl shadow-2xl z-20 py-3 overflow-hidden text-left">
                   <div className="px-4 pb-2 mb-2 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                     <span className="font-bold text-sm text-slate-900 dark:text-white">Notifications</span>
-                    <button 
-                      onClick={() => {
-                        setNotificationsOpen(false);
-                        addToast('Notifications cleared', 'success');
-                      }}
+                    <button
+                      onClick={handleClearNotifications}
+                      disabled={visibleNotifications.length === 0}
                       className="text-2xs text-blue-500 hover:underline font-bold"
                     >
                       Clear all
                     </button>
                   </div>
                   <div className="max-h-72 overflow-y-auto px-2 flex flex-col gap-1">
-                    {notifications.map((notif) => (
-                      <div
+                    {notificationsLoading && visibleNotifications.length === 0 && (
+                      <div className="px-3 py-6 text-center text-xs text-slate-400 font-medium">
+                        Reading on-chain activity...
+                      </div>
+                    )}
+
+                    {!notificationsLoading && visibleNotifications.length === 0 && (
+                      <div className="px-3 py-6 text-center text-xs text-slate-400 font-medium">
+                        No live protocol notifications.
+                      </div>
+                    )}
+
+                    {visibleNotifications.map((notif) => (
+                      <button
                         key={notif.id}
-                        className={`p-3 rounded-xl flex gap-2 text-xs transition-colors hover:bg-slate-50 dark:hover:bg-slate-850
+                        onClick={() => handleNotificationClick(notif.targetPage)}
+                        className={`w-full text-left p-3 rounded-xl flex gap-2 text-xs transition-colors hover:bg-slate-50 dark:hover:bg-slate-850 cursor-pointer
                           ${notif.urgent ? 'bg-rose-50/20 dark:bg-rose-950/5 border-l-2 border-l-rose-500' : ''}
                         `}
                       >
@@ -138,7 +200,7 @@ export function TopHeader({ onMenuToggle }: TopHeaderProps) {
                           </div>
                           <p className="text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">{notif.desc}</p>
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>

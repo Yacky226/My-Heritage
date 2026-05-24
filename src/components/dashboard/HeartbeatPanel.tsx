@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useVaults } from '../../hooks/useVaults';
 import { formatTimeRemaining } from '../../utils/format';
 import { Button } from '../ui/Button';
@@ -8,53 +8,35 @@ interface HeartbeatPanelProps {
   onConfigureTimer: () => void;
 }
 
+function getUnlockTimestamp(vault: ReturnType<typeof useVaults>['vaults'][number]) {
+  return vault.unlockTimestamp ?? (
+    vault.lastPingTimestamp +
+    (vault.inactivityDelaySeconds ?? vault.inactivityDays * 24 * 3600) * 1000
+  );
+}
+
 export function HeartbeatPanel({ onConfigureTimer }: HeartbeatPanelProps) {
   const { vaults, pingVault, isLoading } = useVaults();
-  const [criticalVault, setCriticalVault] = useState(vaults.find((v) => v.status === 'Active'));
-  const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
+  const [now, setNow] = useState(() => Date.now());
 
-  // Scan and identify the active vault with the shortest time remaining
   useEffect(() => {
-    const findCritical = () => {
-      const activeVaults = vaults.filter((v) => v.status === 'Active');
-      if (activeVaults.length === 0) {
-        setCriticalVault(undefined);
-        return;
-      }
+    const ticker = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(ticker);
+  }, []);
 
-      // Sort by soonest expiration
-      const sorted = [...activeVaults].sort((a, b) => {
-        const remainingA = a.inactivityDays * 24 * 3600 * 1000 - (Date.now() - a.lastPingTimestamp);
-        const remainingB = b.inactivityDays * 24 * 3600 * 1000 - (Date.now() - b.lastPingTimestamp);
-        return remainingA - remainingB;
-      });
+  const criticalVault = useMemo(() => {
+    const activeVaults = vaults.filter((vault) => vault.status === 'Active');
 
-      setCriticalVault(sorted[0]);
-    };
+    if (activeVaults.length === 0) return undefined;
 
-    findCritical();
-    const interval = setInterval(findCritical, 1000);
-    return () => clearInterval(interval);
+    return [...activeVaults].sort(
+      (left, right) => getUnlockTimestamp(left) - getUnlockTimestamp(right),
+    )[0];
   }, [vaults]);
 
-  // Handle countdown ticks for the designated critical vault
-  useEffect(() => {
-    if (!criticalVault) {
-      setRemainingSeconds(0);
-      return;
-    }
-
-    const updateTimer = () => {
-      const maxMs = criticalVault.inactivityDays * 24 * 3600 * 1000;
-      const elapsed = Date.now() - criticalVault.lastPingTimestamp;
-      const remaining = Math.max(0, Math.floor((maxMs - elapsed) / 1000));
-      setRemainingSeconds(remaining);
-    };
-
-    updateTimer();
-    const ticker = setInterval(updateTimer, 1000);
-    return () => clearInterval(ticker);
-  }, [criticalVault]);
+  const remainingSeconds = criticalVault
+    ? Math.max(0, Math.ceil((getUnlockTimestamp(criticalVault) - now) / 1000))
+    : 0;
 
   if (!criticalVault) {
     return (
@@ -63,7 +45,7 @@ export function HeartbeatPanel({ onConfigureTimer }: HeartbeatPanelProps) {
           <Activity className="w-5.5 h-5.5" />
         </div>
         <h4 className="text-lg font-bold text-white mb-2">No Active Inactivity Timers</h4>
-        <p className="text-sm text-slate-400 max-w-sm">All digital vaults are currently unconfigured or claimed. Create a vault to begin securing your digital legacy.</p>
+        <p className="text-sm text-slate-400 max-w-sm">Create an active vault to begin monitoring your proof-of-life window from the smart contract.</p>
       </div>
     );
   }
@@ -77,10 +59,6 @@ export function HeartbeatPanel({ onConfigureTimer }: HeartbeatPanelProps) {
 
   return (
     <div className="bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border border-slate-800 text-white rounded-2xl p-6 md:p-8 shadow-xl relative overflow-hidden flex flex-col justify-between h-full min-h-[260px]">
-      {/* Decorative ambient glow blobs */}
-      <div className="absolute -right-16 -top-16 w-36 h-36 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -left-16 -bottom-16 w-36 h-36 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10 h-full w-full">
         {/* Core details */}
         <div className="flex flex-col text-left max-w-md">
